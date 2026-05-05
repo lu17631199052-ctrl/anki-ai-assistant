@@ -31,12 +31,9 @@ class BaseLLMProvider(ABC):
         ...
 
     def test_connection(self) -> bool:
-        """Quick connectivity check."""
-        try:
-            resp = self.chat(
-                [LLMMessage(role="user", content="Hi")],
-                max_tokens=16,
-            )
-            return bool(resp.content)
-        except Exception:
-            return False
+        """Quick connectivity check. Raises on failure for detailed error."""
+        resp = self.chat(
+            [LLMMessage(role="user", content="Hi")],
+            max_tokens=16,
+        )
+        return bool(resp.content)

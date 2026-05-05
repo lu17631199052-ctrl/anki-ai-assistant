@@ -6,6 +6,7 @@ network stack and is proven to work on the user's machine.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import platform
@@ -13,10 +14,24 @@ from typing import Any, Generator
 
 from .base import BaseLLMProvider, LLMMessage, LLMResponse
 
-_CURL_BIN = shutil.which("curl")
-if not _CURL_BIN:
-    # Windows fallback
-    _CURL_BIN = shutil.which("curl.exe")
+
+def _find_curl() -> str | None:
+    """Find curl binary across platforms."""
+    path = shutil.which("curl") or shutil.which("curl.exe")
+    if path:
+        return path
+    # Windows absolute paths
+    if platform.system() == "Windows":
+        for p in [
+            r"C:\Windows\System32\curl.exe",
+            r"C:\Windows\SysWOW64\curl.exe",
+        ]:
+            if os.path.isfile(p):
+                return p
+    return None
+
+
+_CURL_BIN = _find_curl()
 
 
 def _curl_request(
