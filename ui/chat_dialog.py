@@ -92,8 +92,44 @@ def _make_copy_btn(text: str, label: str = "复制") -> QPushButton:
 
 
 def _copy(text: str) -> None:
-    QApplication.clipboard().setText(text)
+    from aqt.qt import QMimeData
+    mime_data = QMimeData()
+    mime_data.setData("text/plain", text.encode("utf-8"))
+    QApplication.clipboard().setMimeData(mime_data)
     tooltip("已复制")
+
+
+def _append_to_card_back(text: str) -> None:
+    """直接把原始 markdown 文本写入当前复习卡片的背面字段。"""
+    reviewer = mw.reviewer
+    if reviewer is None or reviewer.card is None:
+        showWarning("请先在复习界面打开一张卡片", parent=mw)
+        return
+
+    note = reviewer.card.note()
+    if len(note.fields) < 2:
+        showWarning("当前笔记类型至少需要2个字段", parent=mw)
+        return
+
+    existing = note.fields[1]
+    if existing.strip():
+        note.fields[1] = existing + "\n\n" + text.strip()
+    else:
+        note.fields[1] = text.strip()
+
+    mw.col.update_note(note)
+    tooltip("已写入卡片背面")
+
+
+def _make_write_back_btn(text: str, label: str = "写入背面") -> QPushButton:
+    btn = QPushButton(label)
+    btn.setStyleSheet(
+        "QPushButton { font-size: 11px; padding: 2px 8px; border: 1px solid #f90; "
+        "border-radius: 3px; background: #fff3e0; color: #e65100; } "
+        "QPushButton:hover { background: #ffe0b2; }"
+    )
+    btn.clicked.connect(lambda: _append_to_card_back(text))
+    return btn
 
 
 class QuickCardDialog(QDialog):
@@ -417,6 +453,7 @@ class ChatDialog(QDialog):
                 tbl_label = QLabel(f"<b style='color:#888;'>原始 Markdown 表格 {idx + 1}:</b>")
                 tbl_layout.addWidget(tbl_label)
                 tbl_layout.addStretch()
+                tbl_layout.addWidget(_make_write_back_btn(tbl, f"写入背面 {idx + 1}"))
                 tbl_layout.addWidget(_make_copy_btn(tbl, f"复制表格 {idx + 1}"))
 
                 cl.addWidget(tbl_widget)
@@ -436,6 +473,7 @@ class ChatDialog(QDialog):
         btn_row_layout = QHBoxLayout(btn_row)
         btn_row_layout.setContentsMargins(0, 6, 0, 0)
         btn_row_layout.addStretch()
+        btn_row_layout.addWidget(_make_write_back_btn(raw_text, "写入全文到背面"))
         btn_row_layout.addWidget(_make_card_btn(raw_text))
         cl.addWidget(btn_row)
 
