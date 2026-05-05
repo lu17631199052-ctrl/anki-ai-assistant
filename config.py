@@ -9,9 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import os
+
 from aqt import mw
 
-ADDON_NAME = "anki_ai_assistant"
+# Dynamically determine the addon module name (folder name).
+# When installed from AnkiWeb, the folder is a numeric ID, not the package name.
+ADDON_NAME = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 
 # Preset provider definitions
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
