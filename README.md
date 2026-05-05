@@ -46,6 +46,10 @@
 - 操作系统：macOS / Windows / Linux
 - 语言：中文（界面和 AI 回复均为中文）
 
+## 反馈与贡献
+
+如有问题或建议，欢迎在 [GitHub](https://github.com/lu17631199052-ctrl/anki-ai-assistant) 提交 Issue。
+
 ## 许可证
 
 MIT License
