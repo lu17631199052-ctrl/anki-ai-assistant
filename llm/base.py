@@ -30,12 +30,11 @@ class BaseLLMProvider(ABC):
     ) -> LLMResponse:
         ...
 
-    def test_connection(self) -> bool:
+    def test_connection(self, model: str = "") -> bool:
         """Quick connectivity check. Raises on failure for detailed error."""
         resp = self.chat(
-            [
-                LLMMessage(role="user", content="Say 'OK'"),
-            ],
+            [LLMMessage(role="user", content="Say 'OK'")],
+            model=model,
             max_tokens=32,
         )
         return bool(resp.content.strip())

@@ -223,7 +223,7 @@ class SettingsDialog(QDialog):
 
         try:
             client = OpenAICompatProvider(base_url=base_url, api_key=api_key)
-            ok = client.test_connection()
+            ok = client.test_connection(model=model)
             if ok:
                 showInfo("连接成功！", parent=self)
             else:
