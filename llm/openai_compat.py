@@ -1,8 +1,7 @@
-"""OpenAI-compatible API client using curl subprocess.
+"""OpenAI-compatible API client.
 
-Uses subprocess + curl instead of urllib to avoid SSL / proxy / IPv6
-issues in Anki's bundled Python environment. curl uses the OS-native
-network stack and is proven to work on the user's machine.
+Tries curl first (most reliable), falls back to urllib if curl unavailable
+or crashes (e.g. some Windows environments).
 """
 
 import json
@@ -10,17 +9,18 @@ import os
 import shutil
 import subprocess
 import platform
+import ssl
 from typing import Any, Generator
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 from .base import BaseLLMProvider, LLMMessage, LLMResponse
 
 
 def _find_curl() -> str | None:
-    """Find curl binary across platforms."""
     path = shutil.which("curl") or shutil.which("curl.exe")
     if path:
         return path
-    # Windows absolute paths
     if platform.system() == "Windows":
         for p in [
             r"C:\Windows\System32\curl.exe",
@@ -32,23 +32,63 @@ def _find_curl() -> str | None:
 
 
 _CURL_BIN = _find_curl()
+_CURL_FAILED = False  # track if curl previously failed
 
 
-def _curl_request(
+def _request_via_urllib(
     url: str,
     payload: dict[str, Any],
     api_key: str,
     timeout: int = 60,
-    stream: bool = False,
 ) -> str:
-    """Make a POST request via curl. Returns response body as string."""
+    """Fallback HTTP request using urllib with relaxed SSL."""
+    data = json.dumps(payload).encode("utf-8")
+    req = Request(url, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Authorization", f"Bearer {api_key}")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    try:
+        resp = urlopen(req, timeout=timeout, context=ctx)
+        body = resp.read().decode("utf-8")
+        status = resp.getcode()
+        if status != 200:
+            try:
+                err = json.loads(body)
+                msg = err.get("error", {}).get("message", body[:500])
+            except Exception:
+                msg = body[:500]
+            raise RuntimeError(f"API 错误 ({status}): {msg}")
+        return body
+    except HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        try:
+            err = json.loads(error_body)
+            msg = err.get("error", {}).get("message", error_body)
+        except Exception:
+            msg = error_body[:500]
+        raise RuntimeError(f"API 错误 ({e.code}): {msg}")
+    except URLError as e:
+        raise RuntimeError(f"网络错误: {e.reason}")
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(f"请求失败: {e}")
+
+
+def _request_via_curl(
+    url: str,
+    payload: dict[str, Any],
+    api_key: str,
+    timeout: int = 60,
+) -> str:
+    """Primary HTTP request using curl."""
     if not _CURL_BIN:
-        raise RuntimeError(
-            "未找到 curl，请安装 curl 后重试。\n"
-            "macOS: 系统自带\n"
-            "Windows: https://curl.se/windows/\n"
-            "Linux: sudo apt install curl / sudo yum install curl"
-        )
+        raise RuntimeError("curl not found, using fallback")
+
     data = json.dumps(payload)
     cmd = [
         _CURL_BIN,
@@ -61,43 +101,47 @@ def _curl_request(
         "--connect-timeout", "15",
         "--max-time", str(timeout),
     ]
-    if stream:
-        cmd.append("--no-buffer")
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            timeout=timeout + 15,
-            text=False,
-        )
-        stdout = result.stdout.decode("utf-8", errors="replace")
-        stderr = result.stderr.decode("utf-8", errors="replace")
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        timeout=timeout + 15,
+        text=False,
+    )
+    stdout = result.stdout.decode("utf-8", errors="replace")
+    stderr = result.stderr.decode("utf-8", errors="replace")
 
-        if result.returncode != 0:
-            # curl exit code non-zero = network-level failure
-            err_msg = stderr.strip() if stderr.strip() else f"curl exit code {result.returncode}"
-            # Try to extract meaningful error
-            if "Connection refused" in err_msg:
-                raise RuntimeError(f"网络错误: 连接被拒绝，请检查 API 地址是否正确: {url}")
-            elif "Could not resolve host" in err_msg:
-                raise RuntimeError(f"网络错误: 无法解析域名，请检查网络连接")
-            elif "SSL" in err_msg or "certificate" in err_msg:
-                raise RuntimeError(f"网络错误: SSL 证书问题 - {err_msg}")
+    if result.returncode != 0:
+        err_msg = stderr.strip() if stderr.strip() else f"curl exit code {result.returncode}"
+        raise RuntimeError(f"curl 请求失败: {err_msg}")
+
+    if not stdout.strip():
+        raise RuntimeError("API 返回空响应")
+
+    return stdout
+
+
+def _do_request(
+    url: str,
+    payload: dict[str, Any],
+    api_key: str,
+    timeout: int = 60,
+) -> str:
+    """Try curl, fall back to urllib."""
+    global _CURL_FAILED
+
+    if not _CURL_FAILED and _CURL_BIN:
+        try:
+            return _request_via_curl(url, payload, api_key, timeout)
+        except RuntimeError as e:
+            # If curl crashed (Windows STATUS codes), fall back permanently
+            err_str = str(e)
+            if "curl exit code" in err_str or "curl 请求失败" in err_str:
+                _CURL_FAILED = True
             else:
-                raise RuntimeError(f"网络错误: {err_msg}")
+                raise
 
-        if not stdout.strip():
-            raise RuntimeError("API 返回空响应")
-
-        return stdout
-
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("网络超时，请检查网络连接或稍后重试")
-    except RuntimeError:
-        raise
-    except Exception as e:
-        raise RuntimeError(f"请求失败: {e}")
+    return _request_via_urllib(url, payload, api_key, timeout)
 
 
 class OpenAICompatProvider(BaseLLMProvider):
@@ -124,8 +168,7 @@ class OpenAICompatProvider(BaseLLMProvider):
         }
 
         url = self._build_url("/chat/completions")
-
-        raw = _curl_request(url, payload, self.api_key, timeout=60)
+        raw = _do_request(url, payload, self.api_key, timeout=60)
         body = json.loads(raw)
 
         if "error" in body:
@@ -148,6 +191,5 @@ class OpenAICompatProvider(BaseLLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> Generator[str, None, None]:
-        """Streaming - falls back to non-streaming, yields full response."""
         response = self.chat(messages, model, temperature, max_tokens)
         yield response.content
