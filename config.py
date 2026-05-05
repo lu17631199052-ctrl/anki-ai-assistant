@@ -81,6 +81,13 @@ def get_config() -> dict[str, Any]:
         if key not in cfg:
             cfg[key] = val
             changed = True
+    # Migrate old DeepSeek model names
+    if cfg.get("model") == "deepseek-chat":
+        cfg["model"] = "deepseek-v4-flash"
+        changed = True
+    if cfg.get("model") == "deepseek-reasoner":
+        cfg["model"] = "deepseek-v4-pro"
+        changed = True
     if changed:
         mw.addonManager.writeConfig(ADDON_NAME, cfg)
     return cfg
