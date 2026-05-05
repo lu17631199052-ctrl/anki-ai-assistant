@@ -1,0 +1,11 @@
+{
+    "provider": "deepseek",
+    "api_key": "",
+    "model": "deepseek-chat",
+    "base_url": "https://api.deepseek.com/v1",
+    "temperature": 0.7,
+    "max_tokens": 4096,
+    "default_deck": "",
+    "default_note_type": "",
+    "md_to_html": false
+}
