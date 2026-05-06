@@ -117,9 +117,17 @@ def add_cards_to_deck(
         note = Note(col, model)
         for field_idx, card_key in field_mapping.items():
             if card_key == "front":
-                note.fields[field_idx] = card.get("front", "")
+                text = card.get("front", "")
             elif card_key == "back":
-                note.fields[field_idx] = card.get("back", "")
+                text = card.get("back", "")
+            else:
+                text = ""
+            # 纯文本内容：把换行符转为 <br>，确保 Anki 正确显示
+            # （Anki 存储纯文本时 \n 在渲染时会被转为 <br>，
+            #  但编辑器/模板中可能被折叠，统一转 <br> 最可靠）
+            if text and not text.strip().startswith("<"):
+                text = text.replace("\n", "<br>")
+            note.fields[field_idx] = text
         col.add_note(note, deck_id)
         added += 1
 

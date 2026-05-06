@@ -209,6 +209,10 @@ class QuickCardDialog(QDialog):
         if get_config().get("md_to_html", False):
             front = md_to_html(front)
             back = md_to_html(back)
+        else:
+            # 纯文本内容：换行符转为 <br>，确保 Anki 正确显示
+            front = front.replace("\n", "<br>")
+            back = back.replace("\n", "<br>")
 
         deck_id = self.deck_combo.currentData()
         note_type_id = self.note_type_combo.currentData()

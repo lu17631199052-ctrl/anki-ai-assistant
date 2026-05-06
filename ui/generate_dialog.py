@@ -47,7 +47,8 @@ class GenerateDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI 生成卡片")
-        self.setMinimumSize(700, 600)
+        self.setMinimumSize(700, 750)
+        self.resize(700, 800)
         self._cards: list[dict[str, str]] = []
         self._worker: GenerateWorker | None = None
         self._build_ui()
