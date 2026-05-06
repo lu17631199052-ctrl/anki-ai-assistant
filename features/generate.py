@@ -57,6 +57,18 @@ def generate_cards(text: str) -> list[dict[str, str]]:
     cards = _parse_cards_json(response.content)
     if not cards:
         raise RuntimeError("AI 未能生成有效的卡片，请尝试调整文本内容或重试")
+
+    # Fix: LLM 有时在 JSON 字符串中输出字面量 \n（两个字符）
+    # 而不是换行符，导致 markdown 表格被挤成一行
+    for card in cards:
+        for key in ("front", "back"):
+            if key in card:
+                val = card[key]
+                # 把字面量 \n 替换为真正的换行符
+                val = val.replace("\\n", "\n")
+                # 也处理 \n\n（双换行/段落分隔）
+                card[key] = val
+
     return cards
 
 
