@@ -11,7 +11,7 @@ import subprocess
 import platform
 import ssl
 import time
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from http.client import IncompleteRead
@@ -19,7 +19,7 @@ from http.client import IncompleteRead
 from .base import BaseLLMProvider, LLMMessage, LLMResponse
 
 
-def _find_curl() -> str | None:
+def _find_curl() -> Optional[str]:
     path = shutil.which("curl") or shutil.which("curl.exe")
     if path:
         return path

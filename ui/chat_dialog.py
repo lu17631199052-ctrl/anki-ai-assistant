@@ -1,6 +1,7 @@
 """Chat dialog window for AI study assistance."""
 
 import re
+from typing import Optional
 
 from aqt.qt import (
     QDialog,
@@ -254,7 +255,7 @@ class ChatDialog(QDialog):
         self.setMinimumSize(550, 600)
         self.resize(650, 750)
         self.session = ChatSession()
-        self._worker: StreamWorker | None = None
+        self._worker: Optional[StreamWorker] = None
         self._current_ai_raw = ""
         self._message_widgets: list[QWidget] = []
         self._build_ui()

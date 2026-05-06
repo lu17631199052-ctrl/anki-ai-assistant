@@ -1,5 +1,7 @@
 """Dialog for generating Anki cards from text using AI."""
 
+from typing import Optional
+
 from aqt.qt import (
     QDialog,
     QVBoxLayout,
@@ -50,7 +52,7 @@ class GenerateDialog(QDialog):
         self.setMinimumSize(700, 750)
         self.resize(700, 800)
         self._cards: list[dict[str, str]] = []
-        self._worker: GenerateWorker | None = None
+        self._worker: Optional[GenerateWorker] = None
         self._build_ui()
 
     def _build_ui(self) -> None:
