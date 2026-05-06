@@ -17,7 +17,7 @@
 
 | 提供商 | 默认模型 | 是否需要 API Key |
 |--------|----------|:---:|
-| DeepSeek | deepseek-chat | 是 |
+| DeepSeek | deepseek-v4-flash | 是 |
 | 通义千问 (Qwen) | qwen-plus | 是 |
 | 智谱清言 (GLM) | glm-4-flash | 是 |
 | Kimi (Moonshot) | moonshot-v1-8k | 是 |

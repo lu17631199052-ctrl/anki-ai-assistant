@@ -17,6 +17,7 @@ from aqt.qt import (
     QGroupBox,
     QFormLayout,
     QMessageBox,
+    QApplication,
     Qt,
 )
 from aqt import mw
@@ -83,7 +84,47 @@ class GenerateDialog(QDialog):
         self.card_table.setHorizontalHeaderLabels(["正面（问题）", "背面（答案）"])
         self.card_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.card_table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        self.card_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.card_table.itemSelectionChanged.connect(self._on_selection_changed)
         preview_layout.addWidget(self.card_table)
+
+        # Detail view for selected card
+        detail_group = QGroupBox("选中卡片详情（点击上方表格行查看，可直接复制原始内容）")
+        detail_layout = QVBoxLayout()
+
+        self.front_detail = QTextEdit()
+        self.front_detail.setReadOnly(True)
+        self.front_detail.setMaximumHeight(60)
+        self.front_detail.setPlaceholderText("正面（问题）...")
+        self.front_detail.setStyleSheet(
+            "QTextEdit { font-family: 'PingFang SC', sans-serif; font-size: 13px; "
+            "background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 6px; }"
+        )
+        detail_layout.addWidget(QLabel("正面（问题）："))
+        detail_layout.addWidget(self.front_detail)
+
+        self.back_detail = QTextEdit()
+        self.back_detail.setReadOnly(True)
+        self.back_detail.setMaximumHeight(120)
+        self.back_detail.setPlaceholderText("背面（答案）...")
+        self.back_detail.setStyleSheet(
+            "QTextEdit { font-family: 'PingFang SC', sans-serif; font-size: 13px; "
+            "background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 6px; }"
+        )
+        detail_layout.addWidget(QLabel("背面（答案）："))
+        detail_layout.addWidget(self.back_detail)
+
+        copy_btn_layout = QHBoxLayout()
+        copy_btn_layout.addStretch()
+        self.detail_copy_btn = QPushButton("复制选中卡片")
+        self.detail_copy_btn.clicked.connect(self._copy_selected_card)
+        self.detail_copy_btn.setEnabled(False)
+        self.detail_copy_btn.setMinimumHeight(32)
+        copy_btn_layout.addWidget(self.detail_copy_btn)
+        detail_layout.addLayout(copy_btn_layout)
+
+        detail_group.setLayout(detail_layout)
+        preview_layout.addWidget(detail_group)
         preview_group.setLayout(preview_layout)
         layout.addWidget(preview_group)
 
@@ -165,6 +206,32 @@ class GenerateDialog(QDialog):
             self.card_table.setItem(i, 0, front_item)
             self.card_table.setItem(i, 1, back_item)
         self.card_table.resizeRowsToContents()
+
+    def _on_selection_changed(self) -> None:
+        rows: set[int] = set()
+        for item in self.card_table.selectedItems():
+            rows.add(item.row())
+        if len(rows) == 1:
+            row = next(iter(rows))
+            if row < len(self._cards):
+                card = self._cards[row]
+                self.front_detail.setPlainText(card.get("front", ""))
+                self.back_detail.setPlainText(card.get("back", ""))
+                self.detail_copy_btn.setEnabled(True)
+                return
+        self.front_detail.clear()
+        self.back_detail.clear()
+        self.detail_copy_btn.setEnabled(False)
+
+    def _copy_selected_card(self) -> None:
+        front = self.front_detail.toPlainText().strip()
+        back = self.back_detail.toPlainText().strip()
+        if not front and not back:
+            tooltip("没有可复制的内容")
+            return
+        text = f"正面：{front}\n\n背面：{back}"
+        QApplication.clipboard().setText(text)
+        tooltip("已复制")
 
     def _add_to_deck(self) -> None:
         if not self._cards:
