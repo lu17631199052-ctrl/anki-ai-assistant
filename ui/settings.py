@@ -198,9 +198,12 @@ class SettingsDialog(QDialog):
         self.cfg["default_deck"] = self.default_deck_combo.currentData()
         self.cfg["default_note_type"] = self.default_note_type_combo.currentData()
         self.cfg["md_to_html"] = self.md_to_html_check.isChecked()
-        save_config(self.cfg)
-        showInfo("设置已保存", parent=self)
-        self.accept()
+        try:
+            save_config(self.cfg)
+            showInfo("设置已保存", parent=self)
+            self.accept()
+        except Exception as e:
+            showWarning(f"保存设置失败：{e}", parent=self)
 
     def _test_connection(self) -> None:
         provider = self.provider_combo.currentData()
