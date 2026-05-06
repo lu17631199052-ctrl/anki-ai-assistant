@@ -16,6 +16,10 @@ from aqt import mw
 # Dynamically determine the addon module name (folder name).
 # When installed from AnkiWeb, the folder is a numeric ID, not the package name.
 ADDON_NAME = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
+ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
+# Local config backup — bypasses Anki's addonManager on Windows where it may
+# silently fail to persist writes.
+_LOCAL_CONFIG_PATH = os.path.join(ADDON_DIR, "user_config.json")
 
 # Preset provider definitions
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
@@ -71,6 +75,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def get_config() -> dict[str, Any]:
+    # 1. Try local backup first (bypasses Anki config issues on Windows)
+    cfg = _load_local_config()
+    if cfg is not None:
+        return cfg
+
+    # 2. Fall back to Anki's addonManager
     cfg = mw.addonManager.getConfig(ADDON_NAME)
     if cfg is None:
         cfg = dict(DEFAULT_CONFIG)
@@ -93,8 +103,40 @@ def get_config() -> dict[str, Any]:
     return cfg
 
 
+def _load_local_config() -> dict[str, Any] | None:
+    """Try loading config from the local backup file."""
+    import json
+    try:
+        with open(_LOCAL_CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        # Merge in any new keys from defaults
+        changed = False
+        for key, val in DEFAULT_CONFIG.items():
+            if key not in cfg:
+                cfg[key] = val
+                changed = True
+        if changed:
+            _save_local_config(cfg)
+        return cfg
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+def _save_local_config(cfg: dict[str, Any]) -> None:
+    """Save config to the local backup file."""
+    import json
+    with open(_LOCAL_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=4)
+
+
 def save_config(cfg: dict[str, Any]) -> None:
-    mw.addonManager.writeConfig(ADDON_NAME, cfg)
+    # Write to Anki's config system
+    try:
+        mw.addonManager.writeConfig(ADDON_NAME, cfg)
+    except Exception:
+        pass  # Don't fail if Anki's config write fails
+    # Always write local backup (bypasses Windows config persistence issues)
+    _save_local_config(cfg)
 
 
 def get_provider_preset(provider_id: str) -> dict[str, str]:
