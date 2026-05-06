@@ -10,9 +10,11 @@ import shutil
 import subprocess
 import platform
 import ssl
+import time
 from typing import Any, Generator
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+from http.client import IncompleteRead
 
 from .base import BaseLLMProvider, LLMMessage, LLMResponse
 
@@ -73,7 +75,7 @@ def _request_via_urllib(
         raise RuntimeError(f"API 错误 ({e.code}): {msg}")
     except URLError as e:
         raise RuntimeError(f"网络错误: {e.reason}")
-    except RuntimeError:
+    except (RuntimeError, IncompleteRead):
         raise
     except Exception as e:
         raise RuntimeError(f"请求失败: {e}")
@@ -126,22 +128,35 @@ def _do_request(
     payload: dict[str, Any],
     api_key: str,
     timeout: int = 60,
+    _retry: int = 0,
 ) -> str:
-    """Try curl, fall back to urllib."""
+    """Try curl, fall back to urllib. Retry on transient network errors."""
     global _CURL_FAILED
 
-    if not _CURL_FAILED and _CURL_BIN:
+    last_error = None
+    for attempt in range(3):
         try:
-            return _request_via_curl(url, payload, api_key, timeout)
-        except RuntimeError as e:
-            # If curl crashed (Windows STATUS codes), fall back permanently
-            err_str = str(e)
-            if "curl exit code" in err_str or "curl 请求失败" in err_str:
-                _CURL_FAILED = True
-            else:
-                raise
+            if not _CURL_FAILED and _CURL_BIN:
+                try:
+                    return _request_via_curl(url, payload, api_key, timeout)
+                except RuntimeError as e:
+                    err_str = str(e)
+                    if "curl exit code" in err_str or "curl 请求失败" in err_str:
+                        _CURL_FAILED = True
+                    else:
+                        raise
 
-    return _request_via_urllib(url, payload, api_key, timeout)
+            return _request_via_urllib(url, payload, api_key, timeout)
+        except (IncompleteRead, ConnectionResetError, TimeoutError, URLError) as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            raise RuntimeError(f"网络错误（已重试2次仍失败）: {e}") from e
+        except RuntimeError:
+            raise
+
+    raise RuntimeError(f"网络错误（已重试2次仍失败）: {last_error}")
 
 
 class OpenAICompatProvider(BaseLLMProvider):
