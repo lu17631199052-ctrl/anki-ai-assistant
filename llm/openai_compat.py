@@ -108,7 +108,7 @@ def _request_via_curl(
 
     result = subprocess.run(
         cmd,
-        input=data,
+        input=data.encode("utf-8"),
         capture_output=True,
         timeout=timeout + 15,
         text=False,
