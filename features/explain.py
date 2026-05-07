@@ -122,12 +122,12 @@ def explain_current_card(main_window=None) -> None:
 
 def _show_loading(question: str, parent) -> object:
     """Show a small loading indicator while AI generates the explanation."""
-    from aqt.qt import QDialog, QVBoxLayout, QLabel
+    from aqt.qt import QDialog, QVBoxLayout, QLabel, Qt
 
     dialog = QDialog(parent)
     dialog.setWindowTitle("AI 解释中...")
     dialog.setMinimumWidth(350)
-    dialog.setWindowModality(2)  # ApplicationModal to block interaction but not paint
+    dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
     layout = QVBoxLayout(dialog)
     layout.addWidget(QLabel(f"<b>题目：</b>{question[:60]}{'...' if len(question) > 60 else ''}"))
     layout.addWidget(QLabel("AI 正在生成解释，请稍候..."))
