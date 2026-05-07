@@ -64,19 +64,32 @@ class GenerateDialog(QDialog):
         self.text_edit = QTextEdit()
         self.text_edit.setPlaceholderText(
             "在此粘贴学习材料（课堂笔记、课文摘录、文章段落等）...\n\n"
-            "AI 将自动提取关键知识点并生成问答卡片。"
+            "也可以点击下方按钮上传文件或图片，AI 将自动提取文字并填入此框。"
         )
-        self.text_edit.setMinimumHeight(200)
+        self.text_edit.setMinimumHeight(180)
         input_layout.addWidget(self.text_edit)
+
+        # File upload row
+        upload_layout = QHBoxLayout()
+        upload_layout.addWidget(QLabel("📎 上传文件（txt/md/pdf/图片）："))
+        self.upload_btn = QPushButton("选择文件...")
+        self.upload_btn.clicked.connect(self._upload_file)
+        self.upload_btn.setMinimumHeight(28)
+        upload_layout.addWidget(self.upload_btn)
+        upload_layout.addStretch()
+        input_layout.addLayout(upload_layout)
         input_group.setLayout(input_layout)
         layout.addWidget(input_group)
 
         # Generate button
         gen_layout = QHBoxLayout()
+        self.gen_status = QLabel("")
+        self.gen_status.setStyleSheet("color: #888; font-size: 12px;")
+        gen_layout.addWidget(self.gen_status)
+        gen_layout.addStretch()
         self.generate_btn = QPushButton("生成卡片")
         self.generate_btn.clicked.connect(self._generate)
         self.generate_btn.setMinimumHeight(36)
-        gen_layout.addStretch()
         gen_layout.addWidget(self.generate_btn)
         layout.addLayout(gen_layout)
 
@@ -158,7 +171,131 @@ class GenerateDialog(QDialog):
 
         layout.addLayout(bottom_layout)
 
-    def _populate_decks(self) -> None:
+    def _upload_file(self) -> None:
+        """Open file picker and load content into the input area."""
+        from aqt.qt import QFileDialog
+        import base64
+        import os
+        import subprocess
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择文件",
+            "",
+            "所有支持的文件 (*.txt *.md *.py *.json *.csv *.pdf *.png *.jpg *.jpeg *.gif *.bmp);;文本文件 (*.txt *.md);;PDF 文件 (*.pdf);;图片文件 (*.png *.jpg *.jpeg *.gif *.bmp);;所有文件 (*)"
+        )
+        if not path:
+            return
+
+        ext = os.path.splitext(path)[1].lower()
+        self.upload_btn.setEnabled(False)
+        self.gen_status.setText("读取文件中...")
+
+        try:
+            if ext in (".txt", ".md", ".py", ".json", ".csv", ".xml", ".html", ".css", ".js", ".ts"):
+                self._load_text_file(path)
+            elif ext == ".pdf":
+                self._load_pdf_file(path)
+            elif ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
+                self._load_image_file(path)
+            else:
+                # Try as text
+                self._load_text_file(path)
+        except Exception as e:
+            showWarning(f"读取文件失败：{e}", parent=self)
+        finally:
+            self.upload_btn.setEnabled(True)
+            self.gen_status.setText("")
+
+    def _load_text_file(self, path: str) -> None:
+        """Read a text file into the input area."""
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        existing = self.text_edit.toPlainText()
+        if existing.strip():
+            content = existing + "\n\n" + content
+        self.text_edit.setPlainText(content)
+        tooltip(f"已加载：{len(content)} 字符")
+
+    def _load_pdf_file(self, path: str) -> None:
+        """Extract text from a PDF file."""
+        import subprocess
+        import os
+
+        # Try pdftotext (macOS/Linux), then Python libraries
+        text = None
+        for tool in ["pdftotext", "pdfinfo"]:
+            if subprocess.run(["which", tool], capture_output=True).returncode == 0:
+                break
+        else:
+            raise RuntimeError("未找到 pdftotext。macOS 用户请安装：brew install poppler")
+
+        result = subprocess.run(
+            ["pdftotext", "-layout", path, "-"],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"PDF 解析失败：{result.stderr[:200]}")
+        text = result.stdout.strip()
+        if not text:
+            raise RuntimeError("PDF 中未提取到文字（可能是扫描版 PDF，请尝试截图后上传图片）")
+
+        existing = self.text_edit.toPlainText()
+        if existing.strip():
+            text = existing + "\n\n" + text
+        self.text_edit.setPlainText(text)
+        tooltip(f"已提取：{len(text)} 字符")
+
+    def _load_image_file(self, path: str) -> None:
+        """Extract text from an image using the vision API."""
+        import base64
+        import os
+
+        ext = os.path.splitext(path)[1].lower()
+        mime_map = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".gif": "gif", ".bmp": "bmp", ".webp": "webp"}
+        mime = mime_map.get(ext, "jpeg")
+
+        with open(path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode("ascii")
+        data_url = f"data:image/{mime};base64,{img_b64}"
+
+        from ..config import get_config, get_active_base_url, get_active_api_key, get_active_model
+        from ..llm.base import LLMMessage
+        from ..llm.openai_compat import OpenAICompatProvider
+
+        cfg = get_config()
+        base_url = get_active_base_url()
+        api_key = get_active_api_key()
+        model = get_active_model()
+
+        if not api_key and cfg.get("provider") != "ollama":
+            raise RuntimeError("请先在设置中配置 API Key")
+
+        self.gen_status.setText("正在识别图片文字...")
+        tooltip("正在用 AI 识别图片中的文字，请稍候...")
+
+        client = OpenAICompatProvider(base_url=base_url, api_key=api_key)
+        msg = LLMMessage(
+            role="user",
+            content="请提取这张图片中的所有文字内容，保持原有格式。如果是表格请用 Markdown 表格格式输出。只输出文字，不要添加额外说明。",
+            images=[data_url],
+        )
+        response = client.chat(
+            [msg],
+            model=model,
+            temperature=0.1,
+            max_tokens=4096,
+        )
+
+        text = response.content.strip()
+        if not text:
+            raise RuntimeError("AI 未能识别出图片中的文字")
+
+        existing = self.text_edit.toPlainText()
+        if existing.strip():
+            text = existing + "\n\n" + text
+        self.text_edit.setPlainText(text)
+        tooltip(f"已识别：{len(text)} 字符")
         self.deck_combo.clear()
         for deck in mw.col.decks.all_names_and_ids():
             self.deck_combo.addItem(deck.name, deck.id)

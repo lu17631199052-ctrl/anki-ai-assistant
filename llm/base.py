@@ -9,6 +9,7 @@ from typing import Any
 class LLMMessage:
     role: str  # "system", "user", "assistant"
     content: str
+    images: list[str] = field(default_factory=list)  # base64-encoded JPEG/PNG strings
 
 
 @dataclass

@@ -168,6 +168,27 @@ class OpenAICompatProvider(BaseLLMProvider):
     def _build_url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
+    def _build_message(self, m: LLMMessage) -> dict[str, Any]:
+        """Build API message dict, supporting both text and vision."""
+        if not m.images:
+            return {"role": m.role, "content": m.content}
+        # Vision format: content is an array of text + image_url blocks
+        parts: list[dict[str, Any]] = []
+        if m.content.strip():
+            parts.append({"type": "text", "text": m.content})
+        for img_data in m.images:
+            # img_data should be a data URL: "data:image/jpeg;base64,..."
+            if not img_data.startswith("data:"):
+                # MIME type detection fallback
+                prefix = "data:image/jpeg;base64,"
+            else:
+                prefix = ""
+            parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"{prefix}{img_data}" if prefix else img_data},
+            })
+        return {"role": m.role, "content": parts}
+
     def chat(
         self,
         messages: list[LLMMessage],
@@ -177,7 +198,7 @@ class OpenAICompatProvider(BaseLLMProvider):
     ) -> LLMResponse:
         payload: dict[str, Any] = {
             "model": model,
-            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "messages": [self._build_message(m) for m in messages],
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
