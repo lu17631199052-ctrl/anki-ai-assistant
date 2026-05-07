@@ -11,9 +11,8 @@ from aqt.qt import QAction, QMenu
 
 
 def _open_chat() -> None:
-    from .ui.chat_dialog import ChatDialog
-    dialog = ChatDialog(mw)
-    dialog.show()
+    from .ui.chat_dialog import _open_chat as _chat_open
+    _chat_open()
 
 
 def _open_generate() -> None:

@@ -1,10 +1,11 @@
-"""Chat dialog window for AI study assistance."""
+"""Chat panel for AI study assistance — embeddable in Anki sidebar or floating."""
 
 import re
 from typing import Optional
 
 from aqt.qt import (
     QDialog,
+    QDockWidget,
     QVBoxLayout,
     QHBoxLayout,
     QTextBrowser,
@@ -31,6 +32,11 @@ from ..features.chat import ChatSession
 
 from .markdown import md_to_html
 
+# ── singleton references ──────────────────────────────────────────
+_chat_widget: Optional["ChatWidget"] = None
+_dock_widget: Optional[QDockWidget] = None
+_float_dialog: Optional[QDialog] = None
+
 
 class StreamWorker(QThread):
     chunk_received = pyqtSignal(str)
@@ -52,26 +58,20 @@ class StreamWorker(QThread):
 
 
 def _find_md_tables(text: str) -> list[str]:
-    """Find all markdown tables in text. Returns list of raw table strings."""
     tables: list[str] = []
     lines = text.split("\n")
     i = 0
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
-        # A table header must start with | and have a separator line next
         if stripped.startswith("|") and i + 1 < len(lines):
             next_stripped = lines[i + 1].strip()
-            # Separator line: only |, -, :, spaces
             if re.match(r'^\|[\s\-:|]+\|$', next_stripped):
                 tbl: list[str] = []
-                # Collect header
                 tbl.append(lines[i])
                 i += 1
-                # Collect separator
                 tbl.append(lines[i])
                 i += 1
-                # Collect data rows
                 while i < len(lines) and lines[i].strip().startswith("|"):
                     tbl.append(lines[i])
                     i += 1
@@ -101,23 +101,19 @@ def _copy(text: str) -> None:
 
 
 def _append_to_card_back(text: str) -> None:
-    """直接把原始 markdown 文本写入当前复习卡片的背面字段。"""
     reviewer = mw.reviewer
     if reviewer is None or reviewer.card is None:
         showWarning("请先在复习界面打开一张卡片", parent=mw)
         return
-
     note = reviewer.card.note()
     if len(note.fields) < 2:
         showWarning("当前笔记类型至少需要2个字段", parent=mw)
         return
-
     existing = note.fields[1]
     if existing.strip():
         note.fields[1] = existing + "\n\n" + text.strip()
     else:
         note.fields[1] = text.strip()
-
     mw.col.update_note(note)
     tooltip("已写入卡片背面")
 
@@ -145,9 +141,7 @@ class QuickCardDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-
         form = QFormLayout()
-
         self.front_edit = QTextEdit()
         self.front_edit.setMaximumHeight(80)
         self.front_edit.setPlaceholderText("输入卡片的问题...")
@@ -156,18 +150,14 @@ class QuickCardDialog(QDialog):
             first_line = first_line[:60] + "..."
         self.front_edit.setPlainText(first_line)
         form.addRow("正面（问题）:", self.front_edit)
-
         self.back_edit = QTextEdit()
         self.back_edit.setPlainText(self.raw_content.strip())
         form.addRow("背面（答案）:", self.back_edit)
-
         from ..config import get_config
         cfg = get_config()
-
         self.deck_combo = QComboBox()
         for deck in mw.col.decks.all_names_and_ids():
             self.deck_combo.addItem(deck.name, deck.id)
-        # Priority: 1) saved default  2) current review deck
         default_deck = cfg.get("default_deck", "")
         if default_deck:
             idx = self.deck_combo.findData(default_deck)
@@ -178,7 +168,6 @@ class QuickCardDialog(QDialog):
         if idx >= 0:
             self.deck_combo.setCurrentIndex(idx)
         form.addRow("牌组:", self.deck_combo)
-
         self.note_type_combo = QComboBox()
         for nt in mw.col.models.all():
             self.note_type_combo.addItem(nt["name"], nt["id"])
@@ -188,9 +177,7 @@ class QuickCardDialog(QDialog):
             if idx >= 0:
                 self.note_type_combo.setCurrentIndex(idx)
         form.addRow("笔记类型:", self.note_type_combo)
-
         layout.addLayout(form)
-
         buttons = QDialogButtonBox()
         add_btn = buttons.addButton("添加", QDialogButtonBox.ButtonRole.AcceptRole)
         buttons.addButton("取消", QDialogButtonBox.ButtonRole.RejectRole)
@@ -204,30 +191,24 @@ class QuickCardDialog(QDialog):
         if not front or not back:
             showWarning("正面和背面都不能为空", parent=self)
             return
-
-        # Convert markdown to HTML if enabled in settings
         from ..config import get_config
         if get_config().get("md_to_html", False):
             front = md_to_html(front)
             back = md_to_html(back)
         else:
-            # 纯文本内容：换行符转为 <br>，确保 Anki 正确显示
             front = front.replace("\n", "<br>")
             back = back.replace("\n", "<br>")
-
         deck_id = self.deck_combo.currentData()
         note_type_id = self.note_type_combo.currentData()
         model = mw.col.models.get(note_type_id)
         if not model:
             showWarning("无效的笔记类型", parent=self)
             return
-
         from anki.notes import Note
         note = Note(mw.col, model)
         note.fields[0] = front
         if len(note.fields) > 1:
             note.fields[1] = back
-
         try:
             mw.col.add_note(note, deck_id)
             showInfo("卡片已添加", parent=self)
@@ -247,39 +228,41 @@ def _make_card_btn(raw_text: str) -> QPushButton:
     return btn
 
 
-class ChatDialog(QDialog):
+# ═══════════════════════════════════════════════════════════════════
+# ChatWidget — the core chat UI (QWidget, not QDialog)
+# ═══════════════════════════════════════════════════════════════════
+
+class ChatWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("AI 学习助手")
-        self.setMinimumSize(380, 500)
-        self.resize(420, 700)
         self.session = ChatSession()
         self._worker: Optional[StreamWorker] = None
         self._current_ai_raw = ""
         self._message_widgets: list[QWidget] = []
-        self._pending_message: str = ""  # queued message while AI is generating
-        self._docked = False
+        self._pending_message: str = ""
+        self._is_sidebar = True
         self._build_ui()
         self._attach_card_context()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
-        # Top bar: context + dock toggle
+        # Top bar
         top_bar = QHBoxLayout()
         self.context_label = QLabel("")
         self.context_label.setWordWrap(True)
-        self.context_label.setStyleSheet("color: #666; font-size: 12px; padding: 4px;")
+        self.context_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
         top_bar.addWidget(self.context_label, 1)
-        self.dock_btn = QPushButton("📌 固定到右侧")
+        self.dock_btn = QPushButton("⬆ 弹出窗口")
         self.dock_btn.setStyleSheet(
-            "QPushButton { font-size: 11px; padding: 2px 6px; border: 1px solid #aaa; "
+            "QPushButton { font-size: 10px; padding: 2px 4px; border: 1px solid #aaa; "
             "border-radius: 3px; background: #fff; } "
             "QPushButton:hover { background: #e0e0e0; }"
         )
-        self.dock_btn.clicked.connect(self._toggle_dock)
+        self.dock_btn.clicked.connect(self._toggle_mode)
         top_bar.addWidget(self.dock_btn)
         layout.addLayout(top_bar)
 
@@ -287,38 +270,36 @@ class ChatDialog(QDialog):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-
         self.msg_container = QWidget()
         self.msg_layout = QVBoxLayout(self.msg_container)
         self.msg_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.msg_layout.addStretch()
         self.scroll_area.setWidget(self.msg_container)
-        layout.addWidget(self.scroll_area)
+        layout.addWidget(self.scroll_area, 1)
 
-        # Input
+        # Input area
         input_layout = QHBoxLayout()
         self.input_edit = QTextEdit()
-        self.input_edit.setMaximumHeight(100)
-        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+        self.input_edit.setMaximumHeight(80)
+        self.input_edit.setPlaceholderText("输入问题... (Ctrl+Enter 发送)")
         self.input_edit.installEventFilter(self)
         input_layout.addWidget(self.input_edit)
 
         btn_layout = QVBoxLayout()
         self.send_btn = QPushButton("发送")
         self.send_btn.clicked.connect(self._send)
-        self.send_btn.setMinimumHeight(40)
+        self.send_btn.setMinimumHeight(36)
         btn_layout.addWidget(self.send_btn)
 
         self.copy_btn = QPushButton("复制全文")
         self.copy_btn.clicked.connect(self._copy_full)
-        self.copy_btn.setMinimumHeight(30)
+        self.copy_btn.setMinimumHeight(26)
         btn_layout.addWidget(self.copy_btn)
 
         self.clear_btn = QPushButton("清空")
         self.clear_btn.clicked.connect(self._clear)
         btn_layout.addWidget(self.clear_btn)
         input_layout.addLayout(btn_layout)
-
         layout.addLayout(input_layout)
 
     def eventFilter(self, obj, event) -> bool:
@@ -351,28 +332,23 @@ class ChatDialog(QDialog):
         front = fields[0][1].strip() if fields else ""
         back = fields[1][1].strip() if len(fields) > 1 else front
         self.session.set_card_context(front, back)
-        self.context_label.setText(f"当前卡片：{front[:80]}{'...' if len(front) > 80 else ''}")
+        self.context_label.setText(f"当前卡片：{front[:60]}{'...' if len(front) > 60 else ''}")
 
     def _send(self) -> None:
         text = self.input_edit.toPlainText().strip()
         if not text:
             return
-
-        # If worker is busy, queue the message
         if self._worker and self._worker.isRunning():
             self._pending_message = text
             self.input_edit.clear()
             self.input_edit.setPlaceholderText("上一条生成中，消息已排队...")
             return
-
         self.send_btn.setEnabled(False)
         self._add_user_message(text)
         self.input_edit.clear()
         self.input_edit.setPlaceholderText("AI 生成中... (可继续输入排队)")
-
         self._current_ai_raw = ""
         self._add_ai_message_placeholder()
-
         self._worker = StreamWorker(self.session, text)
         self._worker.chunk_received.connect(self._on_chunk)
         self._worker.finished.connect(self._on_finished)
@@ -387,10 +363,8 @@ class ChatDialog(QDialog):
         self._update_last_ai_message()
         self.send_btn.setEnabled(True)
         self.input_edit.setFocus()
-        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+        self.input_edit.setPlaceholderText("输入问题... (Ctrl+Enter 发送)")
         self._worker = None
-
-        # Send queued message if any
         pending = self._pending_message
         self._pending_message = ""
         if pending:
@@ -400,10 +374,8 @@ class ChatDialog(QDialog):
         self._current_ai_raw += f'\n\n❌ 错误: {error}'
         self._update_last_ai_message()
         self.send_btn.setEnabled(True)
-        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+        self.input_edit.setPlaceholderText("输入问题... (Ctrl+Enter 发送)")
         self._worker = None
-
-        # Send queued message if any
         pending = self._pending_message
         self._pending_message = ""
         if pending:
@@ -413,32 +385,28 @@ class ChatDialog(QDialog):
 
     def _add_user_message(self, content: str) -> None:
         label = QLabel(
-            f'<div style="font-size:14px;"><b style="color:#1a73e8;">🧑 你</b></div>'
-            f'<div style="margin:4px 0 0 16px; font-size:14px;">{content}</div>'
+            f'<div style="font-size:13px;"><b style="color:#1a73e8;">🧑 你</b></div>'
+            f'<div style="margin:4px 0 0 12px; font-size:13px;">{content}</div>'
         )
         label.setWordWrap(True)
-        label.setStyleSheet("background: #f5f5f5; border-radius: 8px; padding: 10px; margin: 4px 40px 4px 0;")
+        label.setStyleSheet("background: #f5f5f5; border-radius: 8px; padding: 8px; margin: 2px 20px 2px 0;")
         self._insert_before_stretch(label)
         self._message_widgets.append(label)
 
     def _add_ai_message_placeholder(self) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("background: #f0f7ff; border-radius: 8px; padding: 10px; margin: 4px 0 4px 20px;")
+        container.setStyleSheet("background: #f0f7ff; border-radius: 8px; padding: 8px; margin: 2px 0 2px 10px;")
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
-
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
         header = QLabel('<b style="color:#34a853;">🤖 AI</b>')
         layout.addWidget(header)
-
         content_area = QWidget()
         cl = QVBoxLayout(content_area)
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(4)
         layout.addWidget(content_area)
-
         container._content_layout = cl  # type: ignore
-
         self._insert_before_stretch(container)
         self._message_widgets.append(container)
         return container
@@ -451,19 +419,14 @@ class ChatDialog(QDialog):
         if cl is None:
             self._add_ai_message_placeholder()
             return
-
-        # Clear
         while cl.count():
             item = cl.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-
         if not self._current_ai_raw.strip():
             return
-
         raw_text = self._current_ai_raw.strip()
 
-        # 1. Rendered markdown
         browser = QTextBrowser()
         browser.setOpenExternalLinks(True)
         browser.setReadOnly(True)
@@ -474,45 +437,38 @@ class ChatDialog(QDialog):
         browser.document().setDocumentMargin(4)
         cl.addWidget(browser)
 
-        # 2. Raw markdown tables with copy buttons
         tables = _find_md_tables(raw_text)
         if tables:
-            sep = QLabel('<hr style="border:none; border-top:1px dashed #ccc; margin:8px 0;">')
+            sep = QLabel('<hr style="border:none; border-top:1px dashed #ccc; margin:6px 0;">')
             cl.addWidget(sep)
-
             for idx, tbl in enumerate(tables):
                 tbl_widget = QWidget()
                 tbl_layout = QHBoxLayout(tbl_widget)
-                tbl_layout.setContentsMargins(0, 4, 0, 4)
-                tbl_layout.setSpacing(6)
-
+                tbl_layout.setContentsMargins(0, 2, 0, 2)
+                tbl_layout.setSpacing(4)
                 tbl_label = QLabel(f"<b style='color:#888;'>原始 Markdown 表格 {idx + 1}:</b>")
                 tbl_layout.addWidget(tbl_label)
                 tbl_layout.addStretch()
                 tbl_layout.addWidget(_make_write_back_btn(tbl, f"写入背面 {idx + 1}"))
                 tbl_layout.addWidget(_make_copy_btn(tbl, f"复制表格 {idx + 1}"))
-
                 cl.addWidget(tbl_widget)
-
                 raw_edit = QTextEdit()
                 raw_edit.setPlainText(tbl)
                 raw_edit.setReadOnly(True)
-                raw_edit.setMaximumHeight(120)
+                raw_edit.setMaximumHeight(100)
                 raw_edit.setStyleSheet(
-                    "QTextEdit { font-family: monospace; font-size: 12px; "
-                    "background: #fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 6px; }"
+                    "QTextEdit { font-family: monospace; font-size: 11px; "
+                    "background: #fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 4px; }"
                 )
                 cl.addWidget(raw_edit)
 
-        # 3. Create card button
         btn_row = QWidget()
         btn_row_layout = QHBoxLayout(btn_row)
-        btn_row_layout.setContentsMargins(0, 6, 0, 0)
+        btn_row_layout.setContentsMargins(0, 4, 0, 0)
         btn_row_layout.addStretch()
         btn_row_layout.addWidget(_make_write_back_btn(raw_text, "写入全文到背面"))
         btn_row_layout.addWidget(_make_card_btn(raw_text))
         cl.addWidget(btn_row)
-
         self._scroll_to_bottom()
 
     def _insert_before_stretch(self, widget: QWidget) -> None:
@@ -538,34 +494,86 @@ class ChatDialog(QDialog):
                 item.widget().deleteLater()
         self._message_widgets.clear()
         self._attach_card_context()
-        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+        self.input_edit.setPlaceholderText("输入问题... (Ctrl+Enter 发送)")
 
-    def _toggle_dock(self) -> None:
-        """Switch between floating window and right-side docked panel."""
-        self._docked = not self._docked
+    # ── Sidebar / Float toggle ────────────────────────────────────
 
-        if self._docked:
-            self.dock_btn.setText("📌 弹出窗口")
-            # Remove window decorations, stay on top
-            self.setWindowFlags(
-                Qt.WindowType.FramelessWindowHint
-                | Qt.WindowType.WindowStaysOnTopHint
-                | Qt.WindowType.Tool
-            )
-            self._position_docked()
-            self.show()
+    def _toggle_mode(self) -> None:
+        """Switch between sidebar and floating window."""
+        if self._is_sidebar:
+            self._undock_to_window()
         else:
-            self.dock_btn.setText("📌 固定到右侧")
-            # Restore normal window
-            self.setWindowFlags(Qt.WindowType.Window)
-            self.resize(420, 700)
-            self.show()
+            self._dock_to_sidebar()
 
-    def _position_docked(self) -> None:
-        """Position the dialog to the right side of Anki's main window."""
-        if mw is None:
-            return
-        mw_geo = mw.geometry()
-        dock_width = min(420, mw_geo.width() // 3)
-        self.resize(dock_width, mw_geo.height())
-        self.move(mw_geo.right() - dock_width, mw_geo.top())
+    def _dock_to_sidebar(self) -> None:
+        global _float_dialog, _dock_widget
+        self._is_sidebar = True
+        self.dock_btn.setText("⬆ 弹出窗口")
+        # Close floating dialog
+        if _float_dialog is not None:
+            _float_dialog.hide()
+            _float_dialog = None
+        # Show dock widget
+        if _dock_widget is not None:
+            _dock_widget.setWidget(self)
+            _dock_widget.show()
+            _dock_widget.raise_()
+
+    def _undock_to_window(self) -> None:
+        global _float_dialog, _dock_widget
+        self._is_sidebar = False
+        self.dock_btn.setText("📌 固定到右侧")
+        # Remove from dock
+        if _dock_widget is not None:
+            _dock_widget.removeWidget(self)
+            _dock_widget.hide()
+        # Create floating dialog
+        _float_dialog = QDialog(mw)
+        _float_dialog.setWindowTitle("AI 学习助手")
+        _float_dialog.setMinimumSize(380, 500)
+        _float_dialog.resize(420, 700)
+        layout = QVBoxLayout(_float_dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self)
+        _float_dialog.show()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Public API — create / toggle chat panel
+# ═══════════════════════════════════════════════════════════════════
+
+def _open_chat() -> None:
+    """Open the chat panel — either as sidebar or floating window."""
+    global _chat_widget, _dock_widget
+
+    if _chat_widget is None:
+        _chat_widget = ChatWidget()
+
+    # Default: show as sidebar docked to Anki's right side
+    if _dock_widget is None:
+        _dock_widget = QDockWidget("AI 学习助手", mw)
+        _dock_widget.setObjectName("ai_assistant_chat_dock")
+        _dock_widget.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea)
+        _dock_widget.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetClosable
+        )
+        # When dock is closed by the X button, clean up
+        _dock_widget.destroyed.connect(lambda: _cleanup())
+
+    _dock_widget.setWidget(_chat_widget)
+    mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _dock_widget)
+    _chat_widget._is_sidebar = True
+    _chat_widget.dock_btn.setText("⬆ 弹出窗口")
+    _dock_widget.show()
+    _dock_widget.raise_()
+
+
+def _cleanup() -> None:
+    """Reset singleton state when dock is destroyed."""
+    global _chat_widget, _dock_widget, _float_dialog
+    if _float_dialog is not None:
+        _float_dialog.close()
+        _float_dialog = None
+    _chat_widget = None
+    _dock_widget = None
