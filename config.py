@@ -7,7 +7,7 @@ that the user can select from.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import os
 
@@ -107,7 +107,7 @@ def get_config() -> dict[str, Any]:
     return cfg
 
 
-def _load_local_config() -> dict[str, Any] | None:
+def _load_local_config() -> Optional[dict[str, Any]]:
     """Try loading config from the local backup file."""
     import json
     try:
