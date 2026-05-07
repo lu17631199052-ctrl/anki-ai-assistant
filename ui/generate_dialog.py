@@ -20,6 +20,7 @@ from aqt.qt import (
     QFormLayout,
     QMessageBox,
     QApplication,
+    QImage,
     Qt,
 )
 from aqt import mw
@@ -67,6 +68,7 @@ class GenerateDialog(QDialog):
             "也可以点击下方按钮上传文件或图片，AI 将自动提取文字并填入此框。"
         )
         self.text_edit.setMinimumHeight(180)
+        self.text_edit.installEventFilter(self)
         input_layout.addWidget(self.text_edit)
 
         # File upload row
@@ -170,6 +172,47 @@ class GenerateDialog(QDialog):
         bottom_layout.addWidget(self.add_btn)
 
         layout.addLayout(bottom_layout)
+
+    def eventFilter(self, obj, event) -> bool:
+        """Intercept paste to handle images from clipboard."""
+        from aqt.qt import QEvent
+        if obj is self.text_edit and event.type() == QEvent.Type.KeyPress:
+            # Ctrl+V or Cmd+V
+            is_paste = (
+                event.key() == Qt.Key.Key_V
+                and event.modifiers() == Qt.KeyboardModifier.ControlModifier
+            )
+            if is_paste:
+                if self._paste_image_from_clipboard():
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _paste_image_from_clipboard(self) -> bool:
+        """If clipboard has an image, extract text and insert. Returns True if handled."""
+        from aqt.qt import QImage
+        import tempfile
+        import os
+
+        clipboard = QApplication.clipboard()
+        mime = clipboard.mimeData()
+        if not mime.hasImage():
+            return False
+
+        img = mime.imageData()
+        if img.isNull():
+            return False
+
+        # Save to temp file
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp_path = tmp.name
+        tmp.close()
+        img.save(tmp_path, "PNG")
+
+        try:
+            self._load_image_file(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+        return True
 
     def _upload_file(self) -> None:
         """Open file picker and load content into the input area."""
