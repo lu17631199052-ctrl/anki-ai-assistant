@@ -325,14 +325,106 @@ class GenerateDialog(QDialog):
 
         # 2. Fallback: pure Python PDF text extraction (cross-platform, no deps)
         text = self._extract_pdf_text_pure(path)
-        if not text:
-            raise RuntimeError("PDF 中未提取到文字。请尝试用截图方式上传图片。")
+        if text:
+            existing = self.text_edit.toPlainText()
+            if existing.strip():
+                text = existing + "\n\n" + text
+            self.text_edit.setPlainText(text)
+            tooltip(f"已提取：{len(text)} 字符")
+            return
 
+        # 3. Last resort: scanned/image-based PDF → extract page images → vision API
+        images = self._extract_pdf_images(path)
+        if not images:
+            raise RuntimeError("PDF 中未提取到文字，也找不到嵌入图片。请尝试用截图方式。")
+
+        self.gen_status.setText(f"扫描版 PDF，正在识别 {len(images)} 页...")
+        tooltip(f"检测到扫描版 PDF，正在逐页识别（共 {len(images)} 页）...")
+        all_text: list[str] = []
+        for i, img_path in enumerate(images):
+            self.gen_status.setText(f"正在识别第 {i + 1}/{len(images)} 页...")
+            try:
+                page_text = self._run_vision_ocr(img_path)
+                if page_text.strip():
+                    all_text.append(page_text.strip())
+            finally:
+                os.unlink(img_path)
+
+        if not all_text:
+            raise RuntimeError("AI 未能识别出图片中的文字")
+
+        text = "\n\n".join(all_text)
         existing = self.text_edit.toPlainText()
         if existing.strip():
             text = existing + "\n\n" + text
         self.text_edit.setPlainText(text)
-        tooltip(f"已提取：{len(text)} 字符")
+        tooltip(f"已识别 {len(images)} 页，共 {len(text)} 字符")
+
+    def _run_vision_ocr(self, img_path: str) -> str:
+        """Run vision API on a single image, return extracted text."""
+        import base64
+        import os
+
+        ext = os.path.splitext(img_path)[1].lower()
+        mime_map = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}
+        mime = mime_map.get(ext, "jpeg")
+        with open(img_path, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode("ascii")
+        data_url = f"data:image/{mime};base64,{img_b64}"
+
+        from ..config import get_vision_config
+        from ..llm.base import LLMMessage
+        from ..llm.openai_compat import OpenAICompatProvider
+
+        vc = get_vision_config()
+        client = OpenAICompatProvider(base_url=vc["base_url"], api_key=vc["api_key"])
+        msg = LLMMessage(
+            role="user",
+            content="请提取这张图片中的所有文字内容，保持原有格式。如果是表格请用 Markdown 表格格式输出。只输出文字，不要添加额外说明。",
+            images=[data_url],
+        )
+        response = client.chat([msg], model=vc["model"], temperature=0.1, max_tokens=4096)
+        return response.content.strip()
+
+    @staticmethod
+    def _extract_pdf_images(path: str) -> list[str]:
+        """Extract embedded JPEG images from a scanned PDF.
+
+        Returns list of temp file paths (caller must clean up).
+        Most scanned PDFs use DCTDecode (raw JPEG) for page images.
+        """
+        import re
+        import tempfile
+        import os
+
+        images: list[str] = []
+        with open(path, "rb") as f:
+            data = f.read()
+
+        # Find image XObjects with DCTDecode (JPEG) filter
+        # Pattern: /Type /XObject /Subtype /Image ... /Filter /DCTDecode ... stream ... endstream
+        dct_pattern = re.compile(rb'/Filter\s*/DCTDecode.*?stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
+        for match in dct_pattern.finditer(data):
+            jpeg_data = match.group(1)
+            # Verify it looks like JPEG (starts with FF D8)
+            if jpeg_data[:2] == b'\xff\xd8':
+                tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+                tmp.write(jpeg_data)
+                tmp.close()
+                images.append(tmp.name)
+
+        # Also try JPXDecode (JPEG2000) — less common, skip if not raw JPEG
+        if not images:
+            jpx_pattern = re.compile(rb'/Filter\s*/JPXDecode.*?stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
+            for match in jpx_pattern.finditer(data):
+                jpx_data = match.group(1)
+                if jpx_data[:4] == b'\x00\x00\x00\x0c':  # JP2 signature
+                    tmp = tempfile.NamedTemporaryFile(suffix=".jp2", delete=False)
+                    tmp.write(jpx_data)
+                    tmp.close()
+                    images.append(tmp.name)
+
+        return images
 
     @staticmethod
     def _extract_pdf_text_pure(path: str) -> str:
