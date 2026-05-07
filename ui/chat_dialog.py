@@ -549,6 +549,9 @@ def _open_chat() -> None:
     if _chat_widget is None:
         _chat_widget = ChatWidget()
 
+    # Refresh card context each time the chat is opened
+    _chat_widget._attach_card_context()
+
     # Default: show as sidebar docked to Anki's right side
     if _dock_widget is None:
         _dock_widget = QDockWidget("AI 学习助手", mw)
@@ -558,7 +561,6 @@ def _open_chat() -> None:
             QDockWidget.DockWidgetFeature.DockWidgetMovable
             | QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
-        # When dock is closed by the X button, clean up
         _dock_widget.destroyed.connect(lambda: _cleanup())
 
     _dock_widget.setWidget(_chat_widget)
