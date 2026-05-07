@@ -9,6 +9,9 @@ from aqt.qt import QAction, QMenu
 
 # Delay heavy imports until features are actually used
 
+# Keep references to modeless dialogs so they aren't garbage-collected
+_generate_dialog = None
+
 
 def _open_chat() -> None:
     from .ui.chat_dialog import _open_chat as _chat_open
@@ -17,8 +20,9 @@ def _open_chat() -> None:
 
 def _open_generate() -> None:
     from .ui.generate_dialog import GenerateDialog
-    dialog = GenerateDialog(mw)
-    dialog.show()
+    global _generate_dialog
+    _generate_dialog = GenerateDialog(mw)
+    _generate_dialog.show()
 
 
 def _open_settings() -> None:
