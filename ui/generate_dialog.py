@@ -26,6 +26,28 @@ from aqt.qt import (
 from aqt import mw
 from aqt.utils import showInfo, showWarning, tooltip
 
+def _parse_pdf_text_operators(raw: bytes) -> str:
+    """Parse basic PDF text operators (Tj, TJ, ') into a string."""
+    import re
+    parts: list[str] = []
+
+    # Handle (text) Tj — simple text strings
+    for m in re.finditer(rb'\((.*?)\)\s*Tj', raw):
+        parts.append(m.group(1).decode("latin-1", errors="replace"))
+
+    # Handle [(text) num (text)] TJ — array of strings with positioning
+    for m in re.finditer(rb'\[(.*?)\]\s*TJ', raw):
+        arr = m.group(1)
+        for sm in re.finditer(rb'\((.*?)\)', arr):
+            parts.append(sm.group(1).decode("latin-1", errors="replace"))
+
+    # Handle (text) ' — continuation text
+    for m in re.finditer(rb'\((.*?)\)\s*\'', raw):
+        parts.append(m.group(1).decode("latin-1", errors="replace"))
+
+    return "".join(parts)
+
+
 from ..features.generate import generate_cards, add_cards_to_deck
 
 
@@ -266,7 +288,7 @@ class GenerateDialog(QDialog):
         import os
         import shutil
 
-        # Anki may not have /opt/homebrew/bin in PATH; resolve pdftotext manually
+        # 1. Try pdftotext (macOS/Linux with poppler)
         pdftotext_bin = None
         for candidate in [
             "/opt/homebrew/bin/pdftotext",
@@ -277,24 +299,82 @@ class GenerateDialog(QDialog):
                 break
         if pdftotext_bin is None:
             pdftotext_bin = shutil.which("pdftotext")
-        if pdftotext_bin is None:
-            raise RuntimeError("未找到 pdftotext。macOS 用户请安装：brew install poppler")
+        # Also check Windows common paths
+        if pdftotext_bin is None and os.name == "nt":
+            for candidate in [
+                r"C:\Program Files\poppler\bin\pdftotext.exe",
+                r"C:\poppler\bin\pdftotext.exe",
+            ]:
+                if os.path.isfile(candidate):
+                    pdftotext_bin = candidate
+                    break
 
-        result = subprocess.run(
-            [pdftotext_bin, "-layout", path, "-"],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"PDF 解析失败：{result.stderr[:200]}")
-        text = result.stdout.strip()
+        if pdftotext_bin is not None:
+            result = subprocess.run(
+                [pdftotext_bin, "-layout", path, "-"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                text = result.stdout.strip()
+                existing = self.text_edit.toPlainText()
+                if existing.strip():
+                    text = existing + "\n\n" + text
+                self.text_edit.setPlainText(text)
+                tooltip(f"已提取：{len(text)} 字符")
+                return
+
+        # 2. Fallback: pure Python PDF text extraction (cross-platform, no deps)
+        text = self._extract_pdf_text_pure(path)
         if not text:
-            raise RuntimeError("PDF 中未提取到文字（可能是扫描版 PDF，请尝试截图后上传图片）")
+            raise RuntimeError("PDF 中未提取到文字。请尝试用截图方式上传图片。")
 
         existing = self.text_edit.toPlainText()
         if existing.strip():
             text = existing + "\n\n" + text
         self.text_edit.setPlainText(text)
         tooltip(f"已提取：{len(text)} 字符")
+
+    @staticmethod
+    def _extract_pdf_text_pure(path: str) -> str:
+        """Extract text from PDF using pure Python — no external tools needed.
+
+        Handles basic PDFs with text objects (BT/ET blocks).
+        For scanned/image-based PDFs, returns empty string.
+        """
+        import re
+        import zlib
+
+        result: list[str] = []
+        with open(path, "rb") as f:
+            data = f.read()
+
+        # Find all stream objects and try to decompress them
+        # PDF text is typically in: BT ... (text) Tj ... ET
+        text_pattern = re.compile(rb'BT(.*?)ET', re.DOTALL)
+        stream_pattern = re.compile(rb'stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
+
+        # First, try to extract text from decompressed streams
+        for match in stream_pattern.finditer(data):
+            stream_data = match.group(1)
+            # Try to decompress (most PDF streams are FlateDecode)
+            try:
+                decompressed = zlib.decompress(stream_data)
+                for text_match in text_pattern.finditer(decompressed):
+                    raw = text_match.group(1)
+                    result.append(_parse_pdf_text_operators(raw))
+            except (zlib.error, Exception):
+                # Try uncompressed
+                for text_match in text_pattern.finditer(stream_data):
+                    raw = text_match.group(1)
+                    result.append(_parse_pdf_text_operators(raw))
+
+        # Also try to find text in the raw PDF data
+        if not result:
+            for text_match in text_pattern.finditer(data):
+                raw = text_match.group(1)
+                result.append(_parse_pdf_text_operators(raw))
+
+        return "\n".join(r for r in result if r.strip())
 
     def _load_image_file(self, path: str) -> None:
         """Extract text from an image using the vision API."""
