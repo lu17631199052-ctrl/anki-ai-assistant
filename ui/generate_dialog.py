@@ -301,6 +301,11 @@ class GenerateDialog(QDialog):
         for deck in mw.col.decks.all_names_and_ids():
             self.deck_combo.addItem(deck.name, deck.id)
 
+    def _populate_decks(self) -> None:
+        self.deck_combo.clear()
+        for deck in mw.col.decks.all_names_and_ids():
+            self.deck_combo.addItem(deck.name, deck.id)
+
     def _populate_note_types(self) -> None:
         self.note_type_combo.clear()
         for nt in mw.col.models.all():
