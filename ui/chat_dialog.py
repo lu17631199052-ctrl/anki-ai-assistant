@@ -525,7 +525,7 @@ class ChatWidget(QWidget):
         self.dock_btn.setText("📌 固定到右侧")
         # Remove from dock
         if _dock_widget is not None:
-            _dock_widget.removeWidget(self)
+            _dock_widget.takeWidget()
             _dock_widget.hide()
         # Create floating dialog
         _float_dialog = QDialog(mw)
