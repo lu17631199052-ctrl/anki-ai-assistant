@@ -90,10 +90,8 @@ def explain_current_card(main_window=None) -> None:
         showWarning("请先在设置中配置 API Key（工具 -> AI Assistant -> 设置）", parent=mw_obj)
         return
 
+    tooltip("AI 正在生成解释，请稍候...")
     messages = _build_explain_prompt(front, back)
-
-    # Show a loading dialog
-    loading = _show_loading(front, mw_obj)
 
     # Run API call in background thread
     worker = ExplainWorker(
@@ -106,33 +104,15 @@ def explain_current_card(main_window=None) -> None:
     )
 
     def on_finished(content: str) -> None:
-        loading.close()
         _show_explanation(content, front, mw_obj)
 
     def on_error(error: str) -> None:
-        loading.close()
         showWarning(f"AI 解释失败：{error}", parent=mw_obj)
 
     worker.finished.connect(on_finished)
     worker.error_occurred.connect(on_error)
-    # Keep reference to prevent garbage collection
     worker.finished.connect(worker.deleteLater)
     worker.start()
-
-
-def _show_loading(question: str, parent) -> object:
-    """Show a small loading indicator while AI generates the explanation."""
-    from aqt.qt import QDialog, QVBoxLayout, QLabel, Qt
-
-    dialog = QDialog(parent)
-    dialog.setWindowTitle("AI 解释中...")
-    dialog.setMinimumWidth(350)
-    dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
-    layout = QVBoxLayout(dialog)
-    layout.addWidget(QLabel(f"<b>题目：</b>{question[:60]}{'...' if len(question) > 60 else ''}"))
-    layout.addWidget(QLabel("AI 正在生成解释，请稍候..."))
-    dialog.show()
-    return dialog
 
 
 def _show_explanation(content: str, question: str, parent) -> None:
