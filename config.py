@@ -71,6 +71,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "default_deck": "",
     "default_note_type": "",
     "md_to_html": False,
+    # Vision model for image recognition
+    "vision_provider": "qwen",
+    "vision_api_key": "",
+    "vision_model": "qwen-vl-plus",
 }
 
 
@@ -164,3 +168,21 @@ def get_active_model() -> str:
         return cfg.get("model", "")
     preset = get_provider_preset(provider)
     return cfg.get("model") or preset.get("default_model", "")
+
+
+def get_vision_config() -> dict[str, str]:
+    """Get vision model config — falls back to main config if not set separately."""
+    cfg = get_config()
+    vp = cfg.get("vision_provider", "") or cfg.get("provider", "deepseek")
+    vm = cfg.get("vision_model", "")
+    vk = cfg.get("vision_api_key", "") or cfg.get("api_key", "")
+    preset = get_provider_preset(vp)
+    vu = preset.get("base_url", "") if vp != "custom" else cfg.get("base_url", "")
+    if not vm:
+        # Default vision models per provider
+        vm = {
+            "qwen": "qwen-vl-plus",
+            "zhipu": "glm-4v",
+            "deepseek": "deepseek-v4-flash",
+        }.get(vp, vm)
+    return {"provider": vp, "model": vm, "api_key": vk, "base_url": vu}

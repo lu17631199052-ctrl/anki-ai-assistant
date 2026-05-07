@@ -72,6 +72,27 @@ class SettingsDialog(QDialog):
         api_group.setLayout(api_layout)
         layout.addWidget(api_group)
 
+        # Vision API settings (for image recognition)
+        vision_group = QGroupBox("视觉模型设置（用于图片识别，可不填则使用上方主模型）")
+        vision_layout = QFormLayout()
+        self.vision_provider_combo = QComboBox()
+        for pid, preset in PROVIDER_PRESETS.items():
+            self.vision_provider_combo.addItem(preset["name"], pid)
+        self.vision_provider_combo.currentIndexChanged.connect(self._on_vision_provider_changed)
+        vision_layout.addRow("视觉提供商:", self.vision_provider_combo)
+
+        self.vision_api_key_edit = QLineEdit()
+        self.vision_api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.vision_api_key_edit.setPlaceholderText("留空则使用上方 API Key")
+        vision_layout.addRow("视觉 API Key:", self.vision_api_key_edit)
+
+        self.vision_model_combo = QComboBox()
+        self.vision_model_combo.setEditable(True)
+        self.vision_model_combo.setMinimumWidth(200)
+        vision_layout.addRow("视觉模型:", self.vision_model_combo)
+        vision_group.setLayout(vision_layout)
+        layout.addWidget(vision_group)
+
         # Parameters
         param_group = QGroupBox("生成参数")
         param_layout = QFormLayout()
@@ -149,6 +170,17 @@ class SettingsDialog(QDialog):
         if current_model:
             self.model_combo.setCurrentText(current_model)
 
+        # Vision settings
+        vp = self.cfg.get("vision_provider", "") or "qwen"
+        idx = self.vision_provider_combo.findData(vp)
+        if idx >= 0:
+            self.vision_provider_combo.setCurrentIndex(idx)
+        self.vision_api_key_edit.setText(self.cfg.get("vision_api_key", ""))
+        self._populate_vision_models(vp)
+        vm = self.cfg.get("vision_model", "")
+        if vm:
+            self.vision_model_combo.setCurrentText(vm)
+
         self.temp_spin.setValue(self.cfg.get("temperature", 0.7))
         self.max_tokens_spin.setValue(self.cfg.get("max_tokens", 4096))
 
@@ -198,12 +230,52 @@ class SettingsDialog(QDialog):
         self.cfg["default_deck"] = self.default_deck_combo.currentData()
         self.cfg["default_note_type"] = self.default_note_type_combo.currentData()
         self.cfg["md_to_html"] = self.md_to_html_check.isChecked()
+        self.cfg["vision_provider"] = self.vision_provider_combo.currentData()
+        self.cfg["vision_api_key"] = self.vision_api_key_edit.text().strip()
+        self.cfg["vision_model"] = self.vision_model_combo.currentText().strip()
         try:
             save_config(self.cfg)
             showInfo("设置已保存", parent=self)
             self.accept()
         except Exception as e:
             showWarning(f"保存设置失败：{e}", parent=self)
+
+    def _on_vision_provider_changed(self) -> None:
+        vp = self.vision_provider_combo.currentData()
+        self._populate_vision_models(vp)
+
+    def _populate_vision_models(self, provider_id: str) -> None:
+        self.vision_model_combo.clear()
+        if provider_id == "qwen":
+            for m in ["qwen-vl-plus", "qwen-vl-max", "qwen-plus", "qwen-max"]:
+                self.vision_model_combo.addItem(m)
+        elif provider_id == "zhipu":
+            for m in ["glm-4v", "glm-4v-flash", "glm-4", "glm-4-plus"]:
+                self.vision_model_combo.addItem(m)
+        elif provider_id == "deepseek":
+            for m in ["deepseek-v4-flash", "deepseek-v4-pro"]:
+                self.vision_model_combo.addItem(m)
+        elif provider_id == "moonshot":
+            for m in ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]:
+                self.vision_model_combo.addItem(m)
+        elif provider_id == "ollama":
+            self.vision_model_combo.addItem("llava:latest")
+        else:
+            preset = get_provider_preset(provider_id)
+            models_str = preset.get("models", "")
+            if models_str:
+                for m in models_str.split(","):
+                    self.vision_model_combo.addItem(m.strip())
+            else:
+                self.vision_model_combo.addItem(preset.get("default_model", ""))
+        vp = self.cfg.get("vision_provider", "") or "qwen"
+        # Set default vision model
+        defaults = {"qwen": "qwen-vl-plus", "zhipu": "glm-4v", "deepseek": "deepseek-v4-flash",
+                    "moonshot": "moonshot-v1-8k", "ollama": "llava:latest"}
+        if provider_id == vp:
+            vm = self.cfg.get("vision_model", "") or defaults.get(provider_id, "")
+            if vm:
+                self.vision_model_combo.setCurrentText(vm)
 
     def _test_connection(self) -> None:
         provider = self.provider_combo.currentData()

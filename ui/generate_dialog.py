@@ -259,19 +259,20 @@ class GenerateDialog(QDialog):
             img_b64 = base64.b64encode(f.read()).decode("ascii")
         data_url = f"data:image/{mime};base64,{img_b64}"
 
-        from ..config import get_config, get_active_base_url, get_active_api_key, get_active_model
+        from ..config import get_vision_config
         from ..llm.base import LLMMessage
         from ..llm.openai_compat import OpenAICompatProvider
 
-        cfg = get_config()
-        base_url = get_active_base_url()
-        api_key = get_active_api_key()
-        model = get_active_model()
+        vc = get_vision_config()
+        base_url = vc["base_url"]
+        api_key = vc["api_key"]
+        model = vc["model"]
 
-        if not api_key and cfg.get("provider") != "ollama":
-            raise RuntimeError("请先在设置中配置 API Key")
+        if not api_key:
+            raise RuntimeError("请在设置中配置视觉模型 API Key")
 
-        self.gen_status.setText("正在识别图片文字...")
+        provider_name = vc["provider"]
+        self.gen_status.setText(f"正在用 {provider_name} 视觉模型识别图片...")
         tooltip("正在用 AI 识别图片中的文字，请稍候...")
 
         client = OpenAICompatProvider(base_url=base_url, api_key=api_key)
@@ -289,7 +290,7 @@ class GenerateDialog(QDialog):
 
         text = response.content.strip()
         if not text:
-            raise RuntimeError("AI 未能识别出图片中的文字")
+            raise RuntimeError("AI 未能识别出图片中的文字，请检查视觉模型是否支持图片识别")
 
         existing = self.text_edit.toPlainText()
         if existing.strip():
