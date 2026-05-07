@@ -264,17 +264,24 @@ class GenerateDialog(QDialog):
         """Extract text from a PDF file."""
         import subprocess
         import os
+        import shutil
 
-        # Try pdftotext (macOS/Linux), then Python libraries
-        text = None
-        for tool in ["pdftotext", "pdfinfo"]:
-            if subprocess.run(["which", tool], capture_output=True).returncode == 0:
+        # Anki may not have /opt/homebrew/bin in PATH; resolve pdftotext manually
+        pdftotext_bin = None
+        for candidate in [
+            "/opt/homebrew/bin/pdftotext",
+            "/usr/local/bin/pdftotext",
+        ]:
+            if os.path.isfile(candidate):
+                pdftotext_bin = candidate
                 break
-        else:
+        if pdftotext_bin is None:
+            pdftotext_bin = shutil.which("pdftotext")
+        if pdftotext_bin is None:
             raise RuntimeError("未找到 pdftotext。macOS 用户请安装：brew install poppler")
 
         result = subprocess.run(
-            ["pdftotext", "-layout", path, "-"],
+            [pdftotext_bin, "-layout", path, "-"],
             capture_output=True, text=True, timeout=30
         )
         if result.returncode != 0:
