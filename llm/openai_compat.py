@@ -87,7 +87,9 @@ def _request_via_curl(
     api_key: str,
     timeout: int = 60,
 ) -> str:
-    """Primary HTTP request using curl."""
+    """Primary HTTP request using curl. Data is piped via stdin to avoid
+    command-line argument length limits (important for vision API with large
+    base64-encoded images)."""
     if not _CURL_BIN:
         raise RuntimeError("curl not found, using fallback")
 
@@ -99,13 +101,14 @@ def _request_via_curl(
         url,
         "-H", "Content-Type: application/json",
         "-H", f"Authorization: Bearer {api_key}",
-        "-d", data,
+        "--data-binary", "@-",  # read payload from stdin
         "--connect-timeout", "15",
         "--max-time", str(timeout),
     ]
 
     result = subprocess.run(
         cmd,
+        input=data,
         capture_output=True,
         timeout=timeout + 15,
         text=False,

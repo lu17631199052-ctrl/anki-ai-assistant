@@ -4,7 +4,7 @@
     "mod": 1777971129,
     "min_point_version": 231000,
     "max_point_version": 299999,
-    "human_version": "1.6.1",
+    "human_version": "1.6.2",
     "homepage": "https://github.com/lu17631199052-ctrl/anki-ai-assistant",
     "conflicts": [],
     "description": "国内可用的 AI 学习助手，支持 DeepSeek/通义千问/智谱/Kimi/Ollama。AI 解释卡片、AI 生成卡片、AI 对话。AI-powered study assistant with Chinese LLM support."
