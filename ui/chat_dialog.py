@@ -252,22 +252,36 @@ class ChatDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI 学习助手")
-        self.setMinimumSize(550, 600)
-        self.resize(650, 750)
+        self.setMinimumSize(380, 500)
+        self.resize(420, 700)
         self.session = ChatSession()
         self._worker: Optional[StreamWorker] = None
         self._current_ai_raw = ""
         self._message_widgets: list[QWidget] = []
+        self._pending_message: str = ""  # queued message while AI is generating
+        self._docked = False
         self._build_ui()
         self._attach_card_context()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
 
+        # Top bar: context + dock toggle
+        top_bar = QHBoxLayout()
         self.context_label = QLabel("")
         self.context_label.setWordWrap(True)
         self.context_label.setStyleSheet("color: #666; font-size: 12px; padding: 4px;")
-        layout.addWidget(self.context_label)
+        top_bar.addWidget(self.context_label, 1)
+        self.dock_btn = QPushButton("📌 固定到右侧")
+        self.dock_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 6px; border: 1px solid #aaa; "
+            "border-radius: 3px; background: #fff; } "
+            "QPushButton:hover { background: #e0e0e0; }"
+        )
+        self.dock_btn.clicked.connect(self._toggle_dock)
+        top_bar.addWidget(self.dock_btn)
+        layout.addLayout(top_bar)
 
         # Scroll area
         self.scroll_area = QScrollArea()
@@ -343,13 +357,18 @@ class ChatDialog(QDialog):
         text = self.input_edit.toPlainText().strip()
         if not text:
             return
-        if self._worker and self._worker.isRunning():
-            return
-        self.input_edit.setEnabled(False)
-        self.send_btn.setEnabled(False)
 
+        # If worker is busy, queue the message
+        if self._worker and self._worker.isRunning():
+            self._pending_message = text
+            self.input_edit.clear()
+            self.input_edit.setPlaceholderText("上一条生成中，消息已排队...")
+            return
+
+        self.send_btn.setEnabled(False)
         self._add_user_message(text)
         self.input_edit.clear()
+        self.input_edit.setPlaceholderText("AI 生成中... (可继续输入排队)")
 
         self._current_ai_raw = ""
         self._add_ai_message_placeholder()
@@ -366,17 +385,29 @@ class ChatDialog(QDialog):
 
     def _on_finished(self) -> None:
         self._update_last_ai_message()
-        self.input_edit.setEnabled(True)
         self.send_btn.setEnabled(True)
         self.input_edit.setFocus()
+        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
         self._worker = None
+
+        # Send queued message if any
+        pending = self._pending_message
+        self._pending_message = ""
+        if pending:
+            self._send()
 
     def _on_error(self, error: str) -> None:
         self._current_ai_raw += f'\n\n❌ 错误: {error}'
         self._update_last_ai_message()
-        self.input_edit.setEnabled(True)
         self.send_btn.setEnabled(True)
+        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
         self._worker = None
+
+        # Send queued message if any
+        pending = self._pending_message
+        self._pending_message = ""
+        if pending:
+            self._send()
 
     # ── Message widgets ──────────────────────────────────────────
 
@@ -500,9 +531,41 @@ class ChatDialog(QDialog):
         self.session = ChatSession()
         self.session.set_card_context("", "")
         self._current_ai_raw = ""
+        self._pending_message = ""
         while self.msg_layout.count() > 1:
             item = self.msg_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._message_widgets.clear()
         self._attach_card_context()
+        self.input_edit.setPlaceholderText("输入你的问题... (Ctrl+Enter 发送)")
+
+    def _toggle_dock(self) -> None:
+        """Switch between floating window and right-side docked panel."""
+        self._docked = not self._docked
+
+        if self._docked:
+            self.dock_btn.setText("📌 弹出窗口")
+            # Remove window decorations, stay on top
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowStaysOnTopHint
+                | Qt.WindowType.Tool
+            )
+            self._position_docked()
+            self.show()
+        else:
+            self.dock_btn.setText("📌 固定到右侧")
+            # Restore normal window
+            self.setWindowFlags(Qt.WindowType.Window)
+            self.resize(420, 700)
+            self.show()
+
+    def _position_docked(self) -> None:
+        """Position the dialog to the right side of Anki's main window."""
+        if mw is None:
+            return
+        mw_geo = mw.geometry()
+        dock_width = min(420, mw_geo.width() // 3)
+        self.resize(dock_width, mw_geo.height())
+        self.move(mw_geo.right() - dock_width, mw_geo.top())
