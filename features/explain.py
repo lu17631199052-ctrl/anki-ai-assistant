@@ -1,8 +1,9 @@
 """Explain current card content using AI."""
 
+import threading
+
 from aqt import mw
 from aqt.utils import showInfo, showWarning, tooltip
-from aqt.qt import QThread, pyqtSignal
 
 from ..config import get_config, get_active_base_url, get_active_api_key, get_active_model
 from ..llm.base import LLMMessage
@@ -27,35 +28,6 @@ def _build_explain_prompt(front: str, back: str) -> list[LLMMessage]:
     ]
 
 
-class ExplainWorker(QThread):
-    """Background worker so Anki doesn't freeze during API call."""
-    finished = pyqtSignal(str)
-    error_occurred = pyqtSignal(str)
-
-    def __init__(self, messages: list[LLMMessage], model: str, base_url: str,
-                 api_key: str, temperature: float, max_tokens: int):
-        super().__init__()
-        self._messages = messages
-        self._model = model
-        self._base_url = base_url
-        self._api_key = api_key
-        self._temperature = temperature
-        self._max_tokens = max_tokens
-
-    def run(self) -> None:
-        try:
-            client = OpenAICompatProvider(base_url=self._base_url, api_key=self._api_key)
-            response = client.chat(
-                self._messages,
-                model=self._model,
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-            )
-            self.finished.emit(response.content)
-        except Exception as e:
-            self.error_occurred.emit(str(e))
-
-
 def explain_current_card(main_window=None) -> None:
     """Explain the currently displayed card in the reviewer (non-blocking)."""
     mw_obj = main_window or mw
@@ -67,7 +39,6 @@ def explain_current_card(main_window=None) -> None:
 
     card = reviewer.card
     note = card.note()
-    # Get front and back as plain text
     front = ""
     back = ""
     for field_name, field_val in note.items():
@@ -79,7 +50,7 @@ def explain_current_card(main_window=None) -> None:
                 back = stripped
 
     if not back:
-        back = front  # Fallback: only one field
+        back = front
 
     cfg = get_config()
     base_url = get_active_base_url()
@@ -93,26 +64,24 @@ def explain_current_card(main_window=None) -> None:
     tooltip("AI 正在生成解释，请稍候...")
     messages = _build_explain_prompt(front, back)
 
-    # Run API call in background thread
-    worker = ExplainWorker(
-        messages=messages,
-        model=model,
-        base_url=base_url,
-        api_key=api_key,
-        temperature=cfg.get("temperature", 0.7),
-        max_tokens=cfg.get("max_tokens", 4096),
-    )
+    # Run API call in a daemon thread so Anki stays responsive.
+    # Use QTimer to safely schedule the result callback on the main thread.
+    def _run() -> None:
+        from aqt.qt import QTimer
+        try:
+            client = OpenAICompatProvider(base_url=base_url, api_key=api_key)
+            response = client.chat(
+                messages,
+                model=model,
+                temperature=cfg.get("temperature", 0.7),
+                max_tokens=cfg.get("max_tokens", 4096),
+            )
+            content = response.content
+            QTimer.singleShot(0, lambda: _show_explanation(content, front, mw_obj))
+        except Exception as e:
+            QTimer.singleShot(0, lambda: showWarning(f"AI 解释失败：{e}", parent=mw_obj))
 
-    def on_finished(content: str) -> None:
-        _show_explanation(content, front, mw_obj)
-
-    def on_error(error: str) -> None:
-        showWarning(f"AI 解释失败：{error}", parent=mw_obj)
-
-    worker.finished.connect(on_finished)
-    worker.error_occurred.connect(on_error)
-    worker.finished.connect(worker.deleteLater)
-    worker.start()
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _show_explanation(content: str, question: str, parent) -> None:
@@ -135,5 +104,3 @@ def _show_explanation(content: str, question: str, parent) -> None:
     layout.addWidget(browser)
 
     dialog.show()
-
-
