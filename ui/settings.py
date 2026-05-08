@@ -34,13 +34,72 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Assistant 设置")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(520)
         self.cfg = get_config()
         self._build_ui()
         self._load_config()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        self.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold; font-size: 13px; color: #2C3E50;
+                border: 1px solid #E0E4E8; border-radius: 8px;
+                margin-top: 12px; padding-top: 16px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin; left: 12px; padding: 0 6px;
+                color: #4A90D9;
+            }
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                border: 1px solid #D0D5DD; border-radius: 6px;
+                padding: 6px 10px; font-size: 13px; background: #FFF;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border-color: #4A90D9;
+            }
+            QCheckBox { font-size: 13px; }
+            QPushButton#primary {
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #5B9BD5, stop:1 #4A90D9);
+                color: white; border: none; border-radius: 6px;
+                padding: 8px 24px; font-size: 14px; font-weight: bold;
+            }
+            QPushButton#primary:hover {
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #4A90D9, stop:1 #357ABD);
+            }
+            QPushButton#outline {
+                background: #FFF; color: #4A90D9;
+                border: 1.5px solid #4A90D9; border-radius: 6px;
+                padding: 8px 20px; font-size: 13px;
+            }
+            QPushButton#outline:hover {
+                background: #EBF3FC;
+            }
+            QPushButton#success {
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #5CB85C, stop:1 #449D44);
+                color: white; border: none; border-radius: 6px;
+                padding: 8px 24px; font-size: 14px; font-weight: bold;
+            }
+            QPushButton#success:hover {
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #449D44, stop:1 #398439);
+            }
+            QPushButton#warn {
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #F5A623, stop:1 #E8961A);
+                color: white; border: none; border-radius: 6px;
+                padding: 6px 14px; font-size: 12px; font-weight: bold;
+            }
+            QPushButton#warn:hover {
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #E8961A, stop:1 #D48514);
+            }
+        """)
 
         # Provider selection
         provider_group = QGroupBox("模型提供商")
@@ -134,20 +193,29 @@ class SettingsDialog(QDialog):
 
         # Buttons
         btn_layout = QHBoxLayout()
-        self.test_btn = QPushButton("测试连接")
+        self.test_btn = QPushButton("🔗 测试连接")
+        self.test_btn.setObjectName("outline")
         self.test_btn.clicked.connect(self._test_connection)
+        self.test_btn.setMinimumHeight(36)
         btn_layout.addWidget(self.test_btn)
 
         btn_layout.addStretch()
 
         self.save_btn = QPushButton("保存")
+        self.save_btn.setObjectName("primary")
         self.save_btn.setDefault(True)
         self.save_btn.clicked.connect(self._save)
+        self.save_btn.setMinimumHeight(36)
+        self.save_btn.setMinimumWidth(100)
         btn_layout.addWidget(self.save_btn)
 
         self.cancel_btn = QPushButton("取消")
+        self.cancel_btn.setObjectName("outline")
         self.cancel_btn.clicked.connect(self.reject)
+        self.cancel_btn.setMinimumHeight(36)
         btn_layout.addWidget(self.cancel_btn)
+
+        layout.addLayout(btn_layout)
 
         layout.addLayout(btn_layout)
 

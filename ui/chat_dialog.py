@@ -84,9 +84,9 @@ def _find_md_tables(text: str) -> list[str]:
 def _make_copy_btn(text: str, label: str = "复制") -> QPushButton:
     btn = QPushButton(label)
     btn.setStyleSheet(
-        "QPushButton { font-size: 11px; padding: 2px 8px; border: 1px solid #aaa; "
-        "border-radius: 3px; background: #fff; } "
-        "QPushButton:hover { background: #e0e0e0; }"
+        "QPushButton { font-size: 11px; padding: 4px 10px; border: 1px solid #D0D5DD; "
+        "border-radius: 5px; background: #FFF; color: #555; } "
+        "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
     )
     btn.clicked.connect(lambda: _copy(text))
     return btn
@@ -121,9 +121,11 @@ def _append_to_card_back(text: str) -> None:
 def _make_write_back_btn(text: str, label: str = "写入背面") -> QPushButton:
     btn = QPushButton(label)
     btn.setStyleSheet(
-        "QPushButton { font-size: 11px; padding: 2px 8px; border: 1px solid #f90; "
-        "border-radius: 3px; background: #fff3e0; color: #e65100; } "
-        "QPushButton:hover { background: #ffe0b2; }"
+        "QPushButton { font-size: 11px; padding: 4px 10px; border: none; "
+        "border-radius: 5px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+        "stop:0 #F5A623, stop:1 #E8961A); color: white; font-weight: bold; } "
+        "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+        "stop:0 #E8961A, stop:1 #D48514); }"
     )
     btn.clicked.connect(lambda: _append_to_card_back(text))
     return btn
@@ -180,7 +182,19 @@ class QuickCardDialog(QDialog):
         layout.addLayout(form)
         buttons = QDialogButtonBox()
         add_btn = buttons.addButton("添加", QDialogButtonBox.ButtonRole.AcceptRole)
-        buttons.addButton("取消", QDialogButtonBox.ButtonRole.RejectRole)
+        add_btn.setStyleSheet(
+            "QPushButton { font-size: 13px; padding: 6px 18px; border: none; "
+            "border-radius: 5px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #5CB85C, stop:1 #449D44); color: white; font-weight: bold; } "
+            "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #449D44, stop:1 #398439); }"
+        )
+        cancel_btn = buttons.addButton("取消", QDialogButtonBox.ButtonRole.RejectRole)
+        cancel_btn.setStyleSheet(
+            "QPushButton { font-size: 13px; padding: 6px 18px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; color: #555; } "
+            "QPushButton:hover { background: #F5F7FA; }"
+        )
         buttons.accepted.connect(self._add_card)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -220,9 +234,11 @@ class QuickCardDialog(QDialog):
 def _make_card_btn(raw_text: str) -> QPushButton:
     btn = QPushButton("创建卡片")
     btn.setStyleSheet(
-        "QPushButton { font-size: 11px; padding: 2px 8px; border: 1px solid #4a9; "
-        "border-radius: 3px; background: #e8f5e9; color: #2e7d32; } "
-        "QPushButton:hover { background: #c8e6c9; }"
+        "QPushButton { font-size: 11px; padding: 4px 10px; border: none; "
+        "border-radius: 5px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+        "stop:0 #5CB85C, stop:1 #449D44); color: white; font-weight: bold; } "
+        "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+        "stop:0 #449D44, stop:1 #398439); }"
     )
     btn.clicked.connect(lambda: QuickCardDialog(raw_text, mw).exec())
     return btn
@@ -258,9 +274,9 @@ class ChatWidget(QWidget):
         top_bar.addWidget(self.context_label, 1)
         self.dock_btn = QPushButton("⬆ 弹出窗口")
         self.dock_btn.setStyleSheet(
-            "QPushButton { font-size: 10px; padding: 2px 4px; border: 1px solid #aaa; "
-            "border-radius: 3px; background: #fff; } "
-            "QPushButton:hover { background: #e0e0e0; }"
+            "QPushButton { font-size: 10px; padding: 3px 8px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; color: #777; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; color: #4A90D9; }"
         )
         self.dock_btn.clicked.connect(self._toggle_mode)
         top_bar.addWidget(self.dock_btn)
@@ -287,16 +303,34 @@ class ChatWidget(QWidget):
 
         btn_layout = QVBoxLayout()
         self.send_btn = QPushButton("发送")
+        self.send_btn.setStyleSheet(
+            "QPushButton { font-size: 13px; padding: 8px 14px; border: none; "
+            "border-radius: 6px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #5B9BD5, stop:1 #4A90D9); color: white; font-weight: bold; } "
+            "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #4A90D9, stop:1 #357ABD); } "
+            "QPushButton:disabled { background: #CCC; }"
+        )
         self.send_btn.clicked.connect(self._send)
-        self.send_btn.setMinimumHeight(36)
+        self.send_btn.setMinimumHeight(40)
         btn_layout.addWidget(self.send_btn)
 
         self.copy_btn = QPushButton("复制全文")
+        self.copy_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 4px 8px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; color: #666; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
+        )
         self.copy_btn.clicked.connect(self._copy_full)
-        self.copy_btn.setMinimumHeight(26)
+        self.copy_btn.setMinimumHeight(28)
         btn_layout.addWidget(self.copy_btn)
 
         self.clear_btn = QPushButton("清空")
+        self.clear_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 4px 8px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; color: #666; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
+        )
         self.clear_btn.clicked.connect(self._clear)
         btn_layout.addWidget(self.clear_btn)
         input_layout.addLayout(btn_layout)
@@ -385,21 +419,27 @@ class ChatWidget(QWidget):
 
     def _add_user_message(self, content: str) -> None:
         label = QLabel(
-            f'<div style="font-size:13px;"><b style="color:#1a73e8;">🧑 你</b></div>'
+            f'<div style="font-size:13px;"><b style="color:#4A90D9;">🧑 你</b></div>'
             f'<div style="margin:4px 0 0 12px; font-size:13px;">{content}</div>'
         )
         label.setWordWrap(True)
-        label.setStyleSheet("background: #f5f5f5; border-radius: 8px; padding: 8px; margin: 2px 20px 2px 0;")
+        label.setStyleSheet(
+            "background: #F0F2F5; border-radius: 10px; padding: 10px 14px; "
+            "margin: 2px 30px 6px 4px; border: 1px solid #E8ECF0;"
+        )
         self._insert_before_stretch(label)
         self._message_widgets.append(label)
 
     def _add_ai_message_placeholder(self) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("background: #f0f7ff; border-radius: 8px; padding: 8px; margin: 2px 0 2px 10px;")
+        container.setStyleSheet(
+            "background: #EBF3FC; border-radius: 10px; padding: 10px 14px; "
+            "margin: 2px 4px 6px 20px; border: 1px solid #D6E6F5;"
+        )
         layout = QVBoxLayout(container)
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(4)
-        header = QLabel('<b style="color:#34a853;">🤖 AI</b>')
+        header = QLabel('<b style="color:#4A90D9;">🤖 AI</b>')
         layout.addWidget(header)
         content_area = QWidget()
         cl = QVBoxLayout(content_area)

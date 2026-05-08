@@ -97,8 +97,13 @@ class GenerateDialog(QDialog):
         upload_layout = QHBoxLayout()
         upload_layout.addWidget(QLabel("📎 上传文件（txt/md/pdf/图片）："))
         self.upload_btn = QPushButton("选择文件...")
+        self.upload_btn.setStyleSheet(
+            "QPushButton { font-size: 12px; padding: 6px 14px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; color: #555; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
+        )
         self.upload_btn.clicked.connect(self._upload_file)
-        self.upload_btn.setMinimumHeight(28)
+        self.upload_btn.setMinimumHeight(30)
         upload_layout.addWidget(self.upload_btn)
         upload_layout.addStretch()
         input_layout.addLayout(upload_layout)
@@ -112,8 +117,16 @@ class GenerateDialog(QDialog):
         gen_layout.addWidget(self.gen_status)
         gen_layout.addStretch()
         self.generate_btn = QPushButton("生成卡片")
+        self.generate_btn.setStyleSheet(
+            "QPushButton { font-size: 14px; padding: 8px 24px; border: none; "
+            "border-radius: 6px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #5B9BD5, stop:1 #4A90D9); color: white; font-weight: bold; } "
+            "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #4A90D9, stop:1 #357ABD); } "
+            "QPushButton:disabled { background: #CCC; }"
+        )
         self.generate_btn.clicked.connect(self._generate)
-        self.generate_btn.setMinimumHeight(36)
+        self.generate_btn.setMinimumHeight(38)
         gen_layout.addWidget(self.generate_btn)
         layout.addLayout(gen_layout)
 
@@ -157,6 +170,11 @@ class GenerateDialog(QDialog):
         copy_btn_layout = QHBoxLayout()
         copy_btn_layout.addStretch()
         self.detail_copy_btn = QPushButton("复制选中卡片")
+        self.detail_copy_btn.setStyleSheet(
+            "QPushButton { font-size: 12px; padding: 6px 14px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; color: #555; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
+        )
         self.detail_copy_btn.clicked.connect(self._copy_selected_card)
         self.detail_copy_btn.setEnabled(False)
         self.detail_copy_btn.setMinimumHeight(32)
@@ -188,9 +206,17 @@ class GenerateDialog(QDialog):
         bottom_layout.addStretch()
 
         self.add_btn = QPushButton("添加到牌组")
+        self.add_btn.setStyleSheet(
+            "QPushButton { font-size: 14px; padding: 8px 24px; border: none; "
+            "border-radius: 6px; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #5CB85C, stop:1 #449D44); color: white; font-weight: bold; } "
+            "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #449D44, stop:1 #398439); } "
+            "QPushButton:disabled { background: #CCC; }"
+        )
         self.add_btn.clicked.connect(self._add_to_deck)
         self.add_btn.setEnabled(False)
-        self.add_btn.setMinimumHeight(36)
+        self.add_btn.setMinimumHeight(38)
         bottom_layout.addWidget(self.add_btn)
 
         layout.addLayout(bottom_layout)
