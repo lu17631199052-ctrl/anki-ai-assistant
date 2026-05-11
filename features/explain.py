@@ -23,7 +23,8 @@ EXPLAIN_SYSTEM_PROMPT = """你是一个知识渊博的学习助手。用户会�
 
 class _ExplainEmitter(QObject):
     """Signal emitter for thread-safe callback from background thread."""
-    result_ready = pyqtSignal(str)
+    chunk_ready = pyqtSignal(str)
+    stream_done = pyqtSignal()
     request_failed = pyqtSignal(str)
 
 
@@ -71,30 +72,38 @@ def explain_current_card(main_window=None) -> None:
     tooltip("AI 正在生成解释，请稍候...")
     messages = _build_explain_prompt(front, back)
 
-    # Use QObject + pyqtSignal for thread-safe callback from background thread.
-    # Qt guarantees signals emitted from non-main threads are queued and
-    # delivered on the main thread's event loop.
-    emitter = _ExplainEmitter(mw_obj)
+    # Show dialog immediately, stream content progressively
+    dialog, browser = _create_stream_dialog(front, mw_obj)
 
-    def _on_result(content: str) -> None:
-        _show_explanation(content, front, mw_obj)
+    emitter = _ExplainEmitter(mw_obj)
+    full_content: list[str] = []
+
+    def _on_chunk(chunk: str) -> None:
+        full_content.append(chunk)
+        html = _simple_md_to_html("".join(full_content))
+        browser.setHtml(html)
+
+    def _on_done() -> None:
+        pass
 
     def _on_error(error: str) -> None:
-        showWarning(f"AI 解释失败：{error}", parent=mw_obj)
+        browser.setHtml(f"<p style='color:red;'>AI 解释失败：{error}</p>")
 
-    emitter.result_ready.connect(_on_result)
+    emitter.chunk_ready.connect(_on_chunk)
+    emitter.stream_done.connect(_on_done)
     emitter.request_failed.connect(_on_error)
 
     def _run() -> None:
         try:
             client = OpenAICompatProvider(base_url=base_url, api_key=api_key)
-            response = client.chat(
+            for chunk in client.chat_stream(
                 messages,
                 model=model,
                 temperature=cfg.get("temperature", 0.7),
                 max_tokens=cfg.get("max_tokens", 4096),
-            )
-            emitter.result_ready.emit(response.content)
+            ):
+                emitter.chunk_ready.emit(chunk)
+            emitter.stream_done.emit()
         except Exception as e:
             emitter.request_failed.emit(str(e))
         finally:
@@ -103,9 +112,9 @@ def explain_current_card(main_window=None) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-def _show_explanation(content: str, question: str, parent) -> None:
-    """Show explanation in a dialog."""
-    from aqt.qt import QDialog, QVBoxLayout, QTextBrowser, QLabel, QFont
+def _create_stream_dialog(question: str, parent):
+    """Create and show an empty dialog, return (dialog, browser) for streaming updates."""
+    from aqt.qt import QDialog, QVBoxLayout, QTextBrowser, QLabel
 
     dialog = QDialog(parent)
     dialog.setWindowTitle("AI 解释")
@@ -118,8 +127,8 @@ def _show_explanation(content: str, question: str, parent) -> None:
 
     browser = QTextBrowser()
     browser.setOpenExternalLinks(True)
-    html = _simple_md_to_html(content)
-    browser.setHtml(html)
+    browser.setHtml("<p style='color:#888;'>AI 正在生成解释...</p>")
     layout.addWidget(browser)
 
     dialog.show()
+    return dialog, browser

@@ -126,6 +126,120 @@ def _request_via_curl(
     return stdout
 
 
+def _stream_via_curl(
+    url: str,
+    payload: dict[str, Any],
+    api_key: str,
+    timeout: int = 120,
+) -> Generator[str, None, None]:
+    """Stream SSE response via curl, yielding content chunks."""
+    if not _CURL_BIN:
+        raise RuntimeError("curl not found")
+
+    data = json.dumps(payload)
+    cmd = [
+        _CURL_BIN,
+        "-s",
+        "-X", "POST",
+        url,
+        "-H", "Content-Type: application/json",
+        "-H", f"Authorization: Bearer {api_key}",
+        "--data-binary", "@-",
+        "--connect-timeout", "15",
+        "--max-time", str(timeout),
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    got_content = False
+    try:
+        proc.stdin.write(data.encode("utf-8"))
+        proc.stdin.close()
+
+        for line in proc.stdout:
+            line_str = line.decode("utf-8", errors="replace").strip()
+            if not line_str.startswith("data:"):
+                continue
+            data_str = line_str[5:].strip()
+            if data_str == "[DONE]":
+                break
+            try:
+                obj = json.loads(data_str)
+                if "error" in obj:
+                    msg = obj["error"].get("message", data_str)
+                    raise RuntimeError(f"API 错误: {msg}")
+                delta = obj["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    got_content = True
+                    yield content
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
+
+        proc.wait(timeout=5)
+        if proc.returncode != 0:
+            stderr = proc.stderr.read().decode("utf-8", errors="replace")
+            if stderr.strip():
+                raise RuntimeError(f"curl 请求失败: {stderr.strip()}")
+    finally:
+        proc.stdout.close()
+        proc.stderr.close()
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+
+def _stream_via_urllib(
+    url: str,
+    payload: dict[str, Any],
+    api_key: str,
+    timeout: int = 120,
+) -> Generator[str, None, None]:
+    """Stream SSE via urllib, yielding content chunks."""
+    data = json.dumps(payload).encode("utf-8")
+    req = Request(url, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Authorization", f"Bearer {api_key}")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    try:
+        resp = urlopen(req, timeout=timeout, context=ctx)
+        for line in resp:
+            line_str = line.decode("utf-8", errors="replace").strip()
+            if not line_str.startswith("data:"):
+                continue
+            data_str = line_str[5:].strip()
+            if data_str == "[DONE]":
+                break
+            try:
+                obj = json.loads(data_str)
+                if "error" in obj:
+                    msg = obj["error"].get("message", data_str)
+                    raise RuntimeError(f"API 错误: {msg}")
+                delta = obj["choices"][0].get("delta", {})
+                content = delta.get("content", "")
+                if content:
+                    yield content
+            except (json.JSONDecodeError, KeyError, IndexError):
+                continue
+    except HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        try:
+            err = json.loads(error_body)
+            msg = err.get("error", {}).get("message", error_body)
+        except Exception:
+            msg = error_body[:500]
+        raise RuntimeError(f"API 错误 ({e.code}): {msg}")
+
+
 def _do_request(
     url: str,
     payload: dict[str, Any],
@@ -230,5 +344,26 @@ class OpenAICompatProvider(BaseLLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> Generator[str, None, None]:
-        response = self.chat(messages, model, temperature, max_tokens)
-        yield response.content
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [self._build_message(m) for m in messages],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+
+        url = self._build_url("/chat/completions")
+
+        global _CURL_FAILED
+        if not _CURL_FAILED and _CURL_BIN:
+            try:
+                yield from _stream_via_curl(url, payload, self.api_key, timeout=120)
+                return
+            except RuntimeError as e:
+                err_str = str(e)
+                if "curl exit code" in err_str or "curl 请求失败" in err_str:
+                    _CURL_FAILED = True
+                else:
+                    raise
+
+        yield from _stream_via_urllib(url, payload, self.api_key, timeout=120)

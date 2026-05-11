@@ -98,6 +98,7 @@ def add_cards_to_deck(
     deck_id: int,
     note_type_id: int,
     field_mapping: dict[int, str],
+    tags: str = "",
 ) -> int:
     """Add generated cards to a deck. Returns number of cards added."""
     from anki.collection import Collection
@@ -121,13 +122,12 @@ def add_cards_to_deck(
             elif card_key == "back":
                 text = card.get("back", "")
             else:
-                text = ""
-            # 纯文本内容：把换行符转为 <br>，确保 Anki 正确显示
-            # （Anki 存储纯文本时 \n 在渲染时会被转为 <br>，
-            #  但编辑器/模板中可能被折叠，统一转 <br> 最可靠）
+                text = card.get(card_key, "")
             if text and not text.strip().startswith("<"):
                 text = text.replace("\n", "<br>")
             note.fields[field_idx] = text
+        if tags:
+            note.tags = [t.strip() for t in tags.split() if t.strip()]
         col.add_note(note, deck_id)
         added += 1
 

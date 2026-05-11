@@ -272,6 +272,15 @@ class ChatWidget(QWidget):
         self.context_label.setWordWrap(True)
         self.context_label.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
         top_bar.addWidget(self.context_label, 1)
+        self.refresh_btn = QPushButton("🔄")
+        self.refresh_btn.setToolTip("刷新当前卡片")
+        self.refresh_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 3px 6px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
+        )
+        self.refresh_btn.clicked.connect(self._attach_card_context)
+        top_bar.addWidget(self.refresh_btn)
         self.dock_btn = QPushButton("⬆ 弹出窗口")
         self.dock_btn.setStyleSheet(
             "QPushButton { font-size: 10px; padding: 3px 8px; border: 1px solid #D0D5DD; "
@@ -362,9 +371,9 @@ class ChatWidget(QWidget):
             return
         card = reviewer.card
         note = card.note()
-        fields = list(note.items())
-        front = fields[0][1].strip() if fields else ""
-        back = fields[1][1].strip() if len(fields) > 1 else front
+        fields = [f.strip() for f in note.fields if f.strip()]
+        front = fields[0] if fields else ""
+        back = fields[1] if len(fields) > 1 else front
         self.session.set_card_context(front, back)
         self.context_label.setText(f"当前卡片：{front[:60]}{'...' if len(front) > 60 else ''}")
 
