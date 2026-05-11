@@ -33,7 +33,7 @@ anki-ai-assistant/
 - 源项目路径：`~/ClaudeStudy/anki-ai-assistant/`（git 仓库）
 - GitHub：`https://github.com/lu17631199052-ctrl/anki-ai-assistant`
 - 修改代码后需要同步到 addons21 目录，清除 `__pycache__`，重启 Anki 生效
-- 打包命令：在 addons21 目录下 `zip -r anki_ai_assistant.ankiaddon . -x "*__pycache__*" "*.pyc" ".DS_Store" "meta.json" "config.json"`
+- 打包命令：`python3 -c "import shutil; shutil.make_archive('/Users/lujinbo/Desktop/anki_ai_assistant', 'zip', '/Users/lujinbo/Library/Application Support/Anki2/addons21/anki_ai_assistant'); import os; os.rename('/Users/lujinbo/Desktop/anki_ai_assistant.zip', '/Users/lujinbo/Desktop/anki_ai_assistant.ankiaddon')"` （注意：zip 根目录直接放文件，不要嵌套文件夹）
 - 安装包放桌面，上传到 AnkiWeb 发布更新
 - 版本号在 manifest.json 的 human_version 字段
 - 用户使用中文，笔记类型通常是"正面/背面"两字段
