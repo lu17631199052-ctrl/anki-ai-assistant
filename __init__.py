@@ -11,6 +11,7 @@ from aqt.qt import QAction, QMenu
 
 # Keep references to modeless dialogs so they aren't garbage-collected
 _generate_dialog = None
+_wrong_answer_dialog = None
 
 
 def _open_chat() -> None:
@@ -23,6 +24,13 @@ def _open_generate() -> None:
     global _generate_dialog
     _generate_dialog = GenerateDialog(mw)
     _generate_dialog.show()
+
+
+def _open_wrong_answer() -> None:
+    from .ui.wrong_answer_dialog import WrongAnswerDialog
+    global _wrong_answer_dialog
+    _wrong_answer_dialog = WrongAnswerDialog(mw)
+    _wrong_answer_dialog.show()
 
 
 def _open_settings() -> None:
@@ -50,6 +58,10 @@ def _setup_menu() -> None:
     generate_action: QAction = QAction("AI 生成卡片", mw)
     qconnect(generate_action.triggered, _open_generate)
     menu.addAction(generate_action)
+
+    wrong_answer_action: QAction = QAction("AI 错题整理", mw)
+    qconnect(wrong_answer_action.triggered, _open_wrong_answer)
+    menu.addAction(wrong_answer_action)
 
     menu.addSeparator()
 
@@ -79,6 +91,9 @@ def _on_reviewer_did_show(card) -> None:
 
     shortcut_e = QShortcut(QKeySequence("Ctrl+E"), reviewer.web)
     qconnect(shortcut_e.activated, lambda: explain_current_card(mw))
+
+    shortcut_w = QShortcut(QKeySequence("Ctrl+W"), reviewer.web)
+    qconnect(shortcut_w.activated, _open_wrong_answer)
 
 
 gui_hooks.reviewer_did_show_question.append(_on_reviewer_did_show)
