@@ -20,6 +20,9 @@ from aqt.qt import (
     QWidget,
     QApplication,
     QScrollArea,
+    QStandardItemModel,
+    QStandardItem,
+    QTreeView,
     Qt,
 )
 from aqt import mw
@@ -59,6 +62,7 @@ class WrongAnswerDialog(QDialog):
         self._image_path: Optional[str] = None
         self._cleanup_path: Optional[str] = None
         self._worker: Optional[AnalyzeWorker] = None
+        self._selected_deck_id = None
         self._shown = False
         self._build_ui()
 
@@ -244,25 +248,78 @@ class WrongAnswerDialog(QDialog):
 
     def _populate_decks(self) -> None:
         self.deck_combo.clear()
+        self.deck_combo.setEditable(True)
+        self.deck_combo.lineEdit().setReadOnly(True)
 
-        items = []
+        model = QStandardItemModel()
+        item_map: dict[str, QStandardItem] = {}
+
         for deck in mw.col.decks.all_names_and_ids():
             parts = deck.name.split("::")
-            depth = len(parts) - 1
-            indent = "    " * depth
-            items.append((indent + parts[-1], deck.id, deck.name))
+            item = QStandardItem(parts[-1])
+            item.setData(deck.id, Qt.ItemDataRole.UserRole)
+            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            item_map[deck.name] = item
 
-        # Sort by full name — naturally groups children under parents
-        items.sort(key=lambda x: x[2])
+            if "::" in deck.name:
+                parent_name = deck.name.rsplit("::", 1)[0]
+                parent = item_map.get(parent_name)
+                if parent:
+                    parent.appendRow(item)
+                    continue
+            model.appendRow(item)
+
+        view = QTreeView()
+        view.setHeaderHidden(True)
+        view.setIndentation(16)
+        view.clicked.connect(self._on_deck_tree_clicked)
+
+        self.deck_combo.setModel(model)
+        self.deck_combo.setView(view)
 
         last_deck_id = get_config().get("last_deck_id")
-        select_index = 0
-        for i, (display, deck_id, _) in enumerate(items):
-            self.deck_combo.addItem(display, deck_id)
-            if deck_id == last_deck_id:
-                select_index = i
+        if last_deck_id is not None:
+            self._select_deck_in_tree(model, view, last_deck_id)
+        else:
+            self.deck_combo.setEditText("")
 
-        self.deck_combo.setCurrentIndex(select_index)
+    def _on_deck_tree_clicked(self, idx):
+        model = self.deck_combo.model()
+        if model is None:
+            return
+        item = model.itemFromIndex(idx)
+        if item is None:
+            return
+        self._selected_deck_id = item.data(Qt.ItemDataRole.UserRole)
+        self.deck_combo.setEditText(item.text())
+        self.deck_combo.hidePopup()
+
+    def _select_deck_in_tree(self, model, view, deck_id):
+        """Find item with matching deck_id and select it, expanding ancestors."""
+        def search(parent):
+            for row in range(parent.rowCount()):
+                item = parent.child(row)
+                if item.data(Qt.ItemDataRole.UserRole) == deck_id:
+                    return item
+                found = search(item)
+                if found:
+                    return found
+            return None
+
+        item = search(model.invisibleRootItem())
+        if item is None:
+            return
+
+        self._selected_deck_id = deck_id
+        self.deck_combo.setEditText(item.text())
+
+        idx = item.index()
+        p = idx.parent()
+        while p.isValid():
+            view.expand(p)
+            p = p.parent()
+
+        view.setCurrentIndex(idx)
 
     def _populate_note_types(self) -> None:
         self.note_type_combo.clear()
@@ -364,6 +421,7 @@ class WrongAnswerDialog(QDialog):
                 pass
             self._cleanup_path = None
         self._image_path = None
+        self._selected_deck_id = None
         self.img_label.clear()
         self.img_label.setText("将错题截图拖拽到上方按钮\n或点击选择 / Ctrl+V 粘贴")
         self.img_label.setStyleSheet(
@@ -434,7 +492,7 @@ class WrongAnswerDialog(QDialog):
             showWarning("卡片正面和背面不能为空", parent=self)
             return
 
-        deck_id = self.deck_combo.currentData()
+        deck_id = self._selected_deck_id
         note_type_id = self.note_type_combo.currentData()
 
         if not deck_id or not note_type_id:
@@ -466,6 +524,9 @@ class WrongAnswerDialog(QDialog):
                 )
             showInfo(f"已添加 {added} 张卡片到牌组！", parent=self)
             tooltip(f"已添加 {added} 张卡片")
+            cfg = get_config()
+            cfg["last_deck_id"] = deck_id
+            save_config(cfg)
         except Exception as e:
             showWarning(f"添加卡片失败：{e}", parent=self)
             return

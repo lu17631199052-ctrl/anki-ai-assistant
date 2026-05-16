@@ -24,6 +24,8 @@ class ChatSession:
         self.card_context: str = ""
         self.doc_context: str = ""
         self.doc_name: str = ""
+        self._notebook_id: str = ""
+        self._notebook_mode: bool = False
 
     def set_card_context(self, front: str, back: str) -> None:
         """Set context from the current Anki card."""
@@ -46,14 +48,56 @@ class ChatSession:
     def clear_document_context(self) -> None:
         self.doc_context = ""
         self.doc_name = ""
+        self._notebook_id = ""
+        self._notebook_mode = False
         self._rebuild_system_prompt()
+
+    def set_notebook_context(self, notebook_id: str) -> None:
+        """Load a notebook and use its content as document context."""
+        from .notebook import get_notebook, get_combined_text
+        nb = get_notebook(notebook_id)
+        if nb is None:
+            return
+        text = get_combined_text(notebook_id)
+        if text is None:
+            return
+        self.doc_context = text
+        self.doc_name = f"📓 {nb.name}"
+        self._notebook_id = notebook_id
+        self._notebook_mode = True
+        self._rebuild_system_prompt()
+
+    def clear_notebook_context(self) -> None:
+        """Clear notebook context and return to free mode."""
+        self.doc_context = ""
+        self.doc_name = ""
+        self._notebook_id = ""
+        self._notebook_mode = False
+        self._rebuild_system_prompt()
+
+    @property
+    def notebook_mode(self) -> bool:
+        return self._notebook_mode
+
+    @property
+    def notebook_id(self) -> str:
+        return self._notebook_id
 
     def _rebuild_system_prompt(self) -> None:
         """Rebuild system prompt combining base, card context, and document context."""
         parts = [CHAT_SYSTEM_PROMPT]
         if self.doc_context:
             name = self.doc_name or "参考笔记"
-            parts.append(f"【{name}】\n{self.doc_context}\n\n请基于以上笔记内容回答用户的问题。如果笔记中没有相关信息，请如实说明，不要编造。")
+            if self._notebook_mode:
+                grounding = (
+                    "以上是用户的学习笔记内容，是回答问题的权威参考。"
+                    "请严格基于笔记内容回答，确保答案准确、标准。"
+                    "如果笔记中没有涉及某个问题，请明确告知用户'笔记中未涵盖此内容'，不要自行编造或引入外部知识。"
+                    "回答时可以引用笔记中的原文帮助用户理解。"
+                )
+            else:
+                grounding = "请基于以上笔记内容回答用户的问题。如果笔记中没有相关信息，请如实说明，不要编造。"
+            parts.append(f"【{name}】\n{self.doc_context}\n\n{grounding}")
         if self.card_context:
             parts.append(self.card_context)
         self.messages[0] = LLMMessage(role="system", content="\n\n".join(parts))

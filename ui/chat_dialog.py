@@ -292,37 +292,79 @@ class ChatWidget(QWidget):
         top_bar.addWidget(self.dock_btn)
         layout.addLayout(top_bar)
 
-        # Document bar
-        doc_bar = QHBoxLayout()
-        doc_bar.setSpacing(6)
-        self.doc_upload_btn = QPushButton("📎 上传笔记")
-        self.doc_upload_btn.setToolTip("上传笔记文档（txt/md/pdf/docx/图片），AI 将基于笔记内容回答")
-        self.doc_upload_btn.setStyleSheet(
-            "QPushButton { font-size: 11px; padding: 4px 10px; border: 1px solid #C0D4C0; "
-            "border-radius: 5px; background: #F0F8F0; color: #3A7D44; font-weight: bold; } "
+        # Notebook bar
+        nb_bar = QHBoxLayout()
+        nb_bar.setSpacing(4)
+
+        nb_bar.addWidget(QLabel("📓"))
+        self.notebook_combo = QComboBox()
+        self.notebook_combo.setMinimumWidth(140)
+        self.notebook_combo.setToolTip("选择笔记本，AI 将基于其内容回答")
+        self.notebook_combo.setStyleSheet(
+            "QComboBox { font-size: 11px; padding: 2px 4px; border: 1px solid #D0D5DD; "
+            "border-radius: 4px; background: #FFF; }"
+        )
+        self._populate_notebook_combo()
+        self.notebook_combo.currentIndexChanged.connect(self._on_notebook_selected)
+        nb_bar.addWidget(self.notebook_combo)
+
+        self.nb_upload_btn = QPushButton("📎 上传")
+        self.nb_upload_btn.setToolTip("上传文件到当前笔记本")
+        self.nb_upload_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 3px 8px; border: 1px solid #C0D4C0; "
+            "border-radius: 4px; background: #F0F8F0; color: #3A7D44; } "
             "QPushButton:hover { background: #E0F0E0; border-color: #27AE60; }"
         )
-        self.doc_upload_btn.clicked.connect(self._upload_document)
-        self.doc_upload_btn.setMinimumHeight(28)
-        doc_bar.addWidget(self.doc_upload_btn)
+        self.nb_upload_btn.clicked.connect(self._upload_to_notebook)
+        self.nb_upload_btn.setMinimumHeight(26)
+        nb_bar.addWidget(self.nb_upload_btn)
 
-        self.doc_indicator = QLabel("")
-        self.doc_indicator.setWordWrap(True)
-        self.doc_indicator.setStyleSheet("color: #666; font-size: 11px; padding: 2px 6px;")
-        doc_bar.addWidget(self.doc_indicator, 1)
+        self.nb_new_btn = QPushButton("➕ 新建")
+        self.nb_new_btn.setToolTip("创建新笔记本")
+        self.nb_new_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 3px 8px; border: 1px solid #C0C8D0; "
+            "border-radius: 4px; background: #FFF; color: #555; } "
+            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; }"
+        )
+        self.nb_new_btn.clicked.connect(self._new_notebook)
+        self.nb_new_btn.setMinimumHeight(26)
+        nb_bar.addWidget(self.nb_new_btn)
 
-        self.doc_clear_btn = QPushButton("✕")
-        self.doc_clear_btn.setToolTip("清除已加载的笔记文档")
-        self.doc_clear_btn.setStyleSheet(
-            "QPushButton { font-size: 11px; padding: 3px 8px; border: 1px solid #D0D0D0; "
-            "border-radius: 5px; background: #FFF; color: #999; } "
+        self.nb_delete_btn = QPushButton("🗑")
+        self.nb_delete_btn.setToolTip("删除当前笔记本")
+        self.nb_delete_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 3px 6px; border: 1px solid #E0D0D0; "
+            "border-radius: 4px; background: #FFF; color: #999; } "
             "QPushButton:hover { background: #FDF0F0; border-color: #E74C3C; color: #E74C3C; }"
         )
-        self.doc_clear_btn.clicked.connect(self._clear_document)
-        self.doc_clear_btn.setMinimumHeight(28)
-        self.doc_clear_btn.setVisible(False)
-        doc_bar.addWidget(self.doc_clear_btn)
-        layout.addLayout(doc_bar)
+        self.nb_delete_btn.clicked.connect(self._delete_notebook)
+        self.nb_delete_btn.setMinimumHeight(26)
+        self.nb_delete_btn.setVisible(False)
+        nb_bar.addWidget(self.nb_delete_btn)
+
+        nb_bar.addStretch()
+
+        self.nb_toggle = QPushButton("🔘 自由问答")
+        self.nb_toggle.setToolTip("点击切换：自由问答 / 基于笔记回答")
+        self.nb_toggle.setCheckable(True)
+        self.nb_toggle.setChecked(False)
+        self.nb_toggle.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 3px 10px; border: 2px solid #D0D5DD; "
+            "border-radius: 12px; background: #FFF; color: #888; } "
+            "QPushButton:checked { border-color: #27AE60; background: #E8F8F0; color: #27AE60; font-weight: bold; }"
+        )
+        self.nb_toggle.clicked.connect(self._toggle_notebook_mode)
+        self.nb_toggle.setMinimumHeight(26)
+        nb_bar.addWidget(self.nb_toggle)
+
+        layout.addLayout(nb_bar)
+
+        # Notebook status indicator
+        self.nb_status = QLabel("")
+        self.nb_status.setWordWrap(True)
+        self.nb_status.setStyleSheet("color: #999; font-size: 10px; padding: 0 4px; margin: 0;")
+        self.nb_status.setVisible(False)
+        layout.addWidget(self.nb_status)
 
         # Scroll area
         self.scroll_area = QScrollArea()
@@ -410,27 +452,106 @@ class ChatWidget(QWidget):
         self.session.set_card_context(front, back)
         self.context_label.setText(f"当前卡片：{front[:60]}{'...' if len(front) > 60 else ''}")
 
-    def _upload_document(self) -> None:
-        """Upload a note document and set it as AI reference context."""
+    # ── Notebook management ───────────────────────────────────────
+
+    def _populate_notebook_combo(self) -> None:
+        """Refresh the notebook combo box from stored notebooks."""
+        from ..features.notebook import list_notebooks
+        self.notebook_combo.blockSignals(True)
+        self.notebook_combo.clear()
+        self.notebook_combo.addItem("不使用笔记（自由问答）", "")
+        for nb in list_notebooks():
+            label = f"{nb['name']}（{nb['file_count']}文件 {nb['total_chars']}字）"
+            self.notebook_combo.addItem(label, nb["id"])
+        self.notebook_combo.blockSignals(False)
+
+    def _on_notebook_selected(self, index: int) -> None:
+        notebook_id = self.notebook_combo.currentData()
+        if not notebook_id:
+            # "不使用笔记" selected
+            self.nb_delete_btn.setVisible(False)
+            self.nb_status.setVisible(False)
+            self.nb_toggle.setChecked(False)
+            self._update_toggle_button()
+            self.session.clear_notebook_context()
+            return
+
+        # Notebook selected — load summary info
+        from ..features.notebook import get_notebook
+        nb = get_notebook(notebook_id)
+        if nb:
+            self.nb_status.setText(f"{nb.file_count} 个文件，共 {nb.total_chars} 字")
+            self.nb_status.setVisible(True)
+            self.nb_delete_btn.setVisible(True)
+            if self.nb_toggle.isChecked():
+                self._apply_notebook_context(notebook_id)
+            else:
+                self.session.clear_notebook_context()
+
+    def _apply_notebook_context(self, notebook_id: str) -> None:
+        """Load notebook text into the chat session."""
+        from ..features.notebook import get_notebook
+        nb = get_notebook(notebook_id)
+        if nb is None:
+            return
+        self.session.set_notebook_context(notebook_id)
+        self.nb_status.setText(f"📄 {nb.file_count} 个文件，共 {nb.total_chars} 字 — 已加载")
+        if nb.total_chars > 30000:
+            tooltip(f"笔记总字数 {nb.total_chars}，已截断至 30000 字")
+
+    def _new_notebook(self) -> None:
+        """Create a new notebook: ask for name, then upload files."""
+        from aqt.qt import QInputDialog
+        name, ok = QInputDialog.getText(self, "新建笔记本", "笔记本名称：")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        self._upload_to_notebook(new_notebook_name=name)
+
+    def _delete_notebook(self) -> None:
+        """Delete the currently selected notebook."""
+        notebook_id = self.notebook_combo.currentData()
+        if not notebook_id:
+            return
+        from ..features.notebook import get_notebook, delete_notebook
+        nb = get_notebook(notebook_id)
+        if nb is None:
+            return
+        from aqt.utils import askUser
+        if not askUser(f"确定要删除笔记本「{nb.name}」吗？\n包含 {nb.file_count} 个文件，共 {nb.total_chars} 字。", parent=self):
+            return
+        if delete_notebook(notebook_id):
+            self.session.clear_notebook_context()
+            self._populate_notebook_combo()
+            self.nb_delete_btn.setVisible(False)
+            self.nb_status.setVisible(False)
+            self.nb_toggle.setChecked(False)
+            self._update_toggle_button()
+            tooltip("笔记本已删除")
+
+    def _upload_to_notebook(self, new_notebook_name: str = "") -> None:
+        """Upload files to a notebook. If new_notebook_name is given, create it first."""
         from aqt.qt import QFileDialog
 
-        path, _ = QFileDialog.getOpenFileName(
+        paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "选择笔记文档",
+            "选择笔记文件（可多选）",
             "",
             "所有支持的格式 (*.txt *.md *.pdf *.docx *.png *.jpg *.jpeg *.gif *.bmp *.webp);;"
             "文本文件 (*.txt *.md);;PDF 文件 (*.pdf);;Word 文档 (*.docx);;"
             "图片文件 (*.png *.jpg *.jpeg *.gif *.bmp);;所有文件 (*)",
         )
-        if not path:
+        if not paths:
             return
 
-        self.doc_upload_btn.setEnabled(False)
-        self.doc_indicator.setText("读取文件中...")
+        self.nb_upload_btn.setEnabled(False)
+        self.nb_status.setText("读取文件中...")
+        self.nb_status.setVisible(True)
 
         try:
             from ..config import get_vision_config
             from ..utils.file_parser import parse_file_to_text
+            from ..features.notebook import create_notebook, add_files_to_notebook
 
             vc = get_vision_config()
             vision_config = {
@@ -439,31 +560,93 @@ class ChatWidget(QWidget):
                 "model": vc["model"],
             } if vc.get("api_key") else None
 
-            def progress(msg):
-                self.doc_indicator.setText(msg)
+            parsed_files: list[tuple[str, str]] = []
+            for i, path in enumerate(paths):
+                fname = os.path.basename(path)
+                self.nb_status.setText(f"正在读取：{fname}（{i + 1}/{len(paths)}）...")
+                try:
+                    text = parse_file_to_text(path, vision_config=vision_config)
+                    if text.strip():
+                        parsed_files.append((fname, text.strip()))
+                except Exception as e:
+                    showWarning(f"读取 {fname} 失败：{e}", parent=self)
+                    continue
 
-            text = parse_file_to_text(path, vision_config=vision_config, progress_callback=progress)
+            if not parsed_files:
+                raise RuntimeError("未能从任何文件中提取到文字内容")
 
-            if not text.strip():
-                raise RuntimeError("未能从文件中提取到文字内容")
+            if new_notebook_name:
+                nb = create_notebook(new_notebook_name, parsed_files)
+                self._populate_notebook_combo()
+                # Select the new notebook
+                for i in range(self.notebook_combo.count()):
+                    if self.notebook_combo.itemData(i) == nb.id:
+                        self.notebook_combo.setCurrentIndex(i)
+                        break
+                tooltip(f"笔记本「{nb.name}」已创建，{nb.file_count} 个文件")
+            else:
+                notebook_id = self.notebook_combo.currentData()
+                if not notebook_id:
+                    showWarning("请先选择或新建一个笔记本", parent=self)
+                    return
+                nb = add_files_to_notebook(notebook_id, parsed_files)
+                if nb is None:
+                    raise RuntimeError("笔记本不存在")
+                self._populate_notebook_combo()
+                # Re-select the same notebook
+                for i in range(self.notebook_combo.count()):
+                    if self.notebook_combo.itemData(i) == notebook_id:
+                        self.notebook_combo.setCurrentIndex(i)
+                        break
+                tooltip(f"已添加 {len(parsed_files)} 个文件到「{nb.name}」")
 
-            doc_name = os.path.basename(path)
-            self.session.set_document_context(text, doc_name)
-            self.doc_indicator.setText(f"📄 已加载：{doc_name}（{len(text)} 字）")
-            self.doc_clear_btn.setVisible(True)
-            tooltip(f"已加载笔记：{doc_name}，AI 将基于此内容回答")
+            # If toggle is on, reload context
+            if self.nb_toggle.isChecked():
+                notebook_id = self.notebook_combo.currentData()
+                if notebook_id:
+                    self._apply_notebook_context(notebook_id)
+
         except Exception as e:
             showWarning(f"上传失败：{e}", parent=self)
-            self.doc_indicator.setText("")
         finally:
-            self.doc_upload_btn.setEnabled(True)
+            self.nb_upload_btn.setEnabled(True)
+            self._refresh_nb_status()
 
-    def _clear_document(self) -> None:
-        """Clear the loaded document context."""
-        self.session.clear_document_context()
-        self.doc_indicator.setText("")
-        self.doc_clear_btn.setVisible(False)
-        tooltip("已清除笔记文档")
+    def _toggle_notebook_mode(self) -> None:
+        """Toggle between free Q&A and notebook-grounded mode."""
+        self._update_toggle_button()
+        if self.nb_toggle.isChecked():
+            notebook_id = self.notebook_combo.currentData()
+            if not notebook_id:
+                showWarning("请先在左侧下拉框中选择一个笔记本", parent=self)
+                self.nb_toggle.setChecked(False)
+                self._update_toggle_button()
+                return
+            self._apply_notebook_context(notebook_id)
+            tooltip("已切换为笔记问答模式")
+        else:
+            self.session.clear_notebook_context()
+            self._refresh_nb_status()
+            tooltip("已切换为自由问答模式")
+
+    def _update_toggle_button(self) -> None:
+        if self.nb_toggle.isChecked():
+            self.nb_toggle.setText("📓 笔记回答")
+        else:
+            self.nb_toggle.setText("🔘 自由问答")
+
+    def _refresh_nb_status(self) -> None:
+        notebook_id = self.notebook_combo.currentData()
+        if notebook_id:
+            from ..features.notebook import get_notebook
+            nb = get_notebook(notebook_id)
+            if nb:
+                self.nb_status.setText(f"{nb.file_count} 个文件，共 {nb.total_chars} 字")
+                self.nb_status.setVisible(True)
+            else:
+                self.nb_status.setVisible(False)
+        else:
+            self.nb_status.setVisible(False)
 
     def _send(self) -> None:
         text = self.input_edit.toPlainText().strip()
@@ -621,18 +804,22 @@ class ChatWidget(QWidget):
         ))
 
     def _clear(self) -> None:
+        # Keep notebook context by re-applying it after session reset
+        notebook_id = self.session.notebook_id
+        notebook_mode = self.session.notebook_mode
         self.session = ChatSession()
         self.session.set_card_context("", "")
         self._current_ai_raw = ""
         self._pending_message = ""
-        self.doc_indicator.setText("")
-        self.doc_clear_btn.setVisible(False)
         while self.msg_layout.count() > 1:
             item = self.msg_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._message_widgets.clear()
         self._attach_card_context()
+        # Re-apply notebook context if it was active
+        if notebook_mode and notebook_id:
+            self.session.set_notebook_context(notebook_id)
         self.input_edit.setPlaceholderText("输入问题... (Ctrl+Enter 发送)")
 
     # ── Sidebar / Float toggle ────────────────────────────────────

@@ -4,8 +4,8 @@
 	"mod": 1778462484,
 	"min_point_version": 231000,
 	"max_point_version": 299999,
-	"human_version": "1.10.0",
+	"human_version": "1.11.0",
 	"homepage": "https://github.com/lu17631199052-ctrl/anki-ai-assistant",
 	"conflicts": [],
-	"description": "全能 AI 学习助手，国内直连 DeepSeek/通义千问/智谱/Kimi/Ollama。一键解释卡片（Ctrl+E）、AI 错题整理（Ctrl+W，截图识别 + 生成选择题）、AI 生成卡片（支持 txt/md/pdf/docx/图片上传 + OCR）、AI 对话（流式 Markdown + 卡片上下文 + 上传笔记文档，AI 基于你的笔记内容回答）。支持扫描版 PDF 视觉识别。兼容 macOS / Windows。"
+	"description": "全能 AI 学习助手，国内直连 DeepSeek/通义千问/智谱/Kimi/Ollama。一键解释卡片（Ctrl+E）、AI 错题整理（Ctrl+W，截图识别+生成选择题）、AI 生成卡片（txt/md/pdf/docx/图片上传+OCR）、AI 对话（流式 Markdown+卡片上下文+笔记本系统，上传笔记文档组建知识库，可切换自由问答/笔记问答模式，笔记持久化保存）。支持扫描版 PDF 视觉识别。兼容 macOS / Windows。"
 }

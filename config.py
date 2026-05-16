@@ -70,6 +70,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "max_tokens": 4096,
     "default_deck": "",
     "default_note_type": "",
+    "last_deck_id": None,
     "md_to_html": False,
     # Vision model for image recognition
     "vision_provider": "qwen",

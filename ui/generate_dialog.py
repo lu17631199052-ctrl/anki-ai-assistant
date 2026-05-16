@@ -26,11 +26,15 @@ from aqt.qt import (
     QColorDialog,
     QShortcut,
     QKeySequence,
+    QStandardItemModel,
+    QStandardItem,
+    QTreeView,
     Qt,
 )
 from aqt import mw
 from aqt.utils import showInfo, showWarning, tooltip
 
+from ..config import get_config, save_config
 from ..features.generate import generate_cards, add_cards_to_deck
 from ..utils.file_parser import parse_file_to_text
 
@@ -62,6 +66,7 @@ class GenerateDialog(QDialog):
         self._worker: Optional[GenerateWorker] = None
         self._edit_row: int = -1
         self._field_editors: list[tuple[QLabel, QTextEdit]] = []
+        self._selected_deck_id = None
         self._shown = False
         self._build_ui()
 
@@ -600,9 +605,7 @@ class GenerateDialog(QDialog):
                     text = existing + "\n\n" + text
                 self.text_edit.setPlainText(text)
                 tooltip(f"已识别：{len(text)} 字符")
-                self.deck_combo.clear()
-                for deck in mw.col.decks.all_names_and_ids():
-                    self.deck_combo.addItem(deck.name, deck.id)
+                self._populate_decks()
         finally:
             os.unlink(tmp_path)
         return True
@@ -653,9 +656,7 @@ class GenerateDialog(QDialog):
             ext = os.path.splitext(path)[1].lower()
             if ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
                 # Refresh deck list for image OCR (existing behavior)
-                self.deck_combo.clear()
-                for deck in mw.col.decks.all_names_and_ids():
-                    self.deck_combo.addItem(deck.name, deck.id)
+                self._populate_decks()
 
             tooltip(f"已加载：{len(text)} 字符")
         except Exception as e:
@@ -670,8 +671,78 @@ class GenerateDialog(QDialog):
 
     def _populate_decks(self) -> None:
         self.deck_combo.clear()
+        self.deck_combo.setEditable(True)
+        self.deck_combo.lineEdit().setReadOnly(True)
+
+        model = QStandardItemModel()
+        item_map: dict[str, QStandardItem] = {}
+
         for deck in mw.col.decks.all_names_and_ids():
-            self.deck_combo.addItem(deck.name, deck.id)
+            parts = deck.name.split("::")
+            item = QStandardItem(parts[-1])
+            item.setData(deck.id, Qt.ItemDataRole.UserRole)
+            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            item_map[deck.name] = item
+
+            if "::" in deck.name:
+                parent_name = deck.name.rsplit("::", 1)[0]
+                parent = item_map.get(parent_name)
+                if parent:
+                    parent.appendRow(item)
+                    continue
+            model.appendRow(item)
+
+        view = QTreeView()
+        view.setHeaderHidden(True)
+        view.setIndentation(16)
+        view.clicked.connect(self._on_deck_tree_clicked)
+
+        self.deck_combo.setModel(model)
+        self.deck_combo.setView(view)
+
+        last_deck_id = get_config().get("last_deck_id")
+        if last_deck_id is not None:
+            self._select_deck_in_tree(model, view, last_deck_id)
+        else:
+            self.deck_combo.setEditText("")
+
+    def _on_deck_tree_clicked(self, idx):
+        model = self.deck_combo.model()
+        if model is None:
+            return
+        item = model.itemFromIndex(idx)
+        if item is None:
+            return
+        self._selected_deck_id = item.data(Qt.ItemDataRole.UserRole)
+        self.deck_combo.setEditText(item.text())
+        self.deck_combo.hidePopup()
+
+    def _select_deck_in_tree(self, model, view, deck_id):
+        """Find item with matching deck_id and select it, expanding ancestors."""
+        def search(parent):
+            for row in range(parent.rowCount()):
+                item = parent.child(row)
+                if item.data(Qt.ItemDataRole.UserRole) == deck_id:
+                    return item
+                found = search(item)
+                if found:
+                    return found
+            return None
+
+        item = search(model.invisibleRootItem())
+        if item is None:
+            return
+
+        self._selected_deck_id = deck_id
+        self.deck_combo.setEditText(item.text())
+
+        idx = item.index()
+        p = idx.parent()
+        while p.isValid():
+            view.expand(p)
+            p = p.parent()
+
+        view.setCurrentIndex(idx)
 
     def _populate_note_types(self) -> None:
         self.note_type_combo.clear()
@@ -801,7 +872,7 @@ class GenerateDialog(QDialog):
             showWarning("请先勾选要添加的卡片", parent=self)
             return
 
-        deck_id = self.deck_combo.currentData()
+        deck_id = self._selected_deck_id
         note_type_id = self.note_type_combo.currentData()
 
         if deck_id is None or note_type_id is None:
@@ -832,6 +903,9 @@ class GenerateDialog(QDialog):
         try:
             count = add_cards_to_deck(selected, deck_id, note_type_id, field_mapping, tags)
             showInfo(f"已添加 {count} 张卡片到牌组", parent=self)
+            cfg = get_config()
+            cfg["last_deck_id"] = deck_id
+            save_config(cfg)
             self._cards = [c for i, c in enumerate(self._cards) if i not in checked]
             self._edit_row = -1
             self._populate_table()
