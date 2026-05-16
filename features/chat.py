@@ -22,19 +22,41 @@ class ChatSession:
             LLMMessage(role="system", content=CHAT_SYSTEM_PROMPT)
         ]
         self.card_context: str = ""
+        self.doc_context: str = ""
+        self.doc_name: str = ""
 
     def set_card_context(self, front: str, back: str) -> None:
         """Set context from the current Anki card."""
-        self.card_context = f"用户当前正在复习以下卡片：\n问题：{front}\n答案：{back}"
-        # Update the system message with context
-        base = CHAT_SYSTEM_PROMPT
-        if self.card_context:
-            base += f"\n\n{self.card_context}"
-        self.messages[0] = LLMMessage(role="system", content=base)
+        if front and back:
+            self.card_context = f"用户当前正在复习以下卡片：\n问题：{front}\n答案：{back}"
+        else:
+            self.card_context = ""
+        self._rebuild_system_prompt()
 
     def clear_card_context(self) -> None:
         self.card_context = ""
-        self.messages[0] = LLMMessage(role="system", content=CHAT_SYSTEM_PROMPT)
+        self._rebuild_system_prompt()
+
+    def set_document_context(self, doc_text: str, doc_name: str = "") -> None:
+        """Set reference document context — AI answers are grounded in this material."""
+        self.doc_context = doc_text
+        self.doc_name = doc_name
+        self._rebuild_system_prompt()
+
+    def clear_document_context(self) -> None:
+        self.doc_context = ""
+        self.doc_name = ""
+        self._rebuild_system_prompt()
+
+    def _rebuild_system_prompt(self) -> None:
+        """Rebuild system prompt combining base, card context, and document context."""
+        parts = [CHAT_SYSTEM_PROMPT]
+        if self.doc_context:
+            name = self.doc_name or "参考笔记"
+            parts.append(f"【{name}】\n{self.doc_context}\n\n请基于以上笔记内容回答用户的问题。如果笔记中没有相关信息，请如实说明，不要编造。")
+        if self.card_context:
+            parts.append(self.card_context)
+        self.messages[0] = LLMMessage(role="system", content="\n\n".join(parts))
 
     def send(self, user_message: str) -> str:
         """Send a message and get the response. Non-streaming."""

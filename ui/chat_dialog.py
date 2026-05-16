@@ -1,5 +1,6 @@
 """Chat panel for AI study assistance — embeddable in Anki sidebar or floating."""
 
+import os
 import re
 from typing import Optional
 
@@ -291,6 +292,38 @@ class ChatWidget(QWidget):
         top_bar.addWidget(self.dock_btn)
         layout.addLayout(top_bar)
 
+        # Document bar
+        doc_bar = QHBoxLayout()
+        doc_bar.setSpacing(6)
+        self.doc_upload_btn = QPushButton("📎 上传笔记")
+        self.doc_upload_btn.setToolTip("上传笔记文档（txt/md/pdf/docx/图片），AI 将基于笔记内容回答")
+        self.doc_upload_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 4px 10px; border: 1px solid #C0D4C0; "
+            "border-radius: 5px; background: #F0F8F0; color: #3A7D44; font-weight: bold; } "
+            "QPushButton:hover { background: #E0F0E0; border-color: #27AE60; }"
+        )
+        self.doc_upload_btn.clicked.connect(self._upload_document)
+        self.doc_upload_btn.setMinimumHeight(28)
+        doc_bar.addWidget(self.doc_upload_btn)
+
+        self.doc_indicator = QLabel("")
+        self.doc_indicator.setWordWrap(True)
+        self.doc_indicator.setStyleSheet("color: #666; font-size: 11px; padding: 2px 6px;")
+        doc_bar.addWidget(self.doc_indicator, 1)
+
+        self.doc_clear_btn = QPushButton("✕")
+        self.doc_clear_btn.setToolTip("清除已加载的笔记文档")
+        self.doc_clear_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 3px 8px; border: 1px solid #D0D0D0; "
+            "border-radius: 5px; background: #FFF; color: #999; } "
+            "QPushButton:hover { background: #FDF0F0; border-color: #E74C3C; color: #E74C3C; }"
+        )
+        self.doc_clear_btn.clicked.connect(self._clear_document)
+        self.doc_clear_btn.setMinimumHeight(28)
+        self.doc_clear_btn.setVisible(False)
+        doc_bar.addWidget(self.doc_clear_btn)
+        layout.addLayout(doc_bar)
+
         # Scroll area
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -376,6 +409,61 @@ class ChatWidget(QWidget):
         back = fields[1] if len(fields) > 1 else front
         self.session.set_card_context(front, back)
         self.context_label.setText(f"当前卡片：{front[:60]}{'...' if len(front) > 60 else ''}")
+
+    def _upload_document(self) -> None:
+        """Upload a note document and set it as AI reference context."""
+        from aqt.qt import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择笔记文档",
+            "",
+            "所有支持的格式 (*.txt *.md *.pdf *.docx *.png *.jpg *.jpeg *.gif *.bmp *.webp);;"
+            "文本文件 (*.txt *.md);;PDF 文件 (*.pdf);;Word 文档 (*.docx);;"
+            "图片文件 (*.png *.jpg *.jpeg *.gif *.bmp);;所有文件 (*)",
+        )
+        if not path:
+            return
+
+        self.doc_upload_btn.setEnabled(False)
+        self.doc_indicator.setText("读取文件中...")
+
+        try:
+            from ..config import get_vision_config
+            from ..utils.file_parser import parse_file_to_text
+
+            vc = get_vision_config()
+            vision_config = {
+                "base_url": vc["base_url"],
+                "api_key": vc["api_key"],
+                "model": vc["model"],
+            } if vc.get("api_key") else None
+
+            def progress(msg):
+                self.doc_indicator.setText(msg)
+
+            text = parse_file_to_text(path, vision_config=vision_config, progress_callback=progress)
+
+            if not text.strip():
+                raise RuntimeError("未能从文件中提取到文字内容")
+
+            doc_name = os.path.basename(path)
+            self.session.set_document_context(text, doc_name)
+            self.doc_indicator.setText(f"📄 已加载：{doc_name}（{len(text)} 字）")
+            self.doc_clear_btn.setVisible(True)
+            tooltip(f"已加载笔记：{doc_name}，AI 将基于此内容回答")
+        except Exception as e:
+            showWarning(f"上传失败：{e}", parent=self)
+            self.doc_indicator.setText("")
+        finally:
+            self.doc_upload_btn.setEnabled(True)
+
+    def _clear_document(self) -> None:
+        """Clear the loaded document context."""
+        self.session.clear_document_context()
+        self.doc_indicator.setText("")
+        self.doc_clear_btn.setVisible(False)
+        tooltip("已清除笔记文档")
 
     def _send(self) -> None:
         text = self.input_edit.toPlainText().strip()
@@ -537,6 +625,8 @@ class ChatWidget(QWidget):
         self.session.set_card_context("", "")
         self._current_ai_raw = ""
         self._pending_message = ""
+        self.doc_indicator.setText("")
+        self.doc_clear_btn.setVisible(False)
         while self.msg_layout.count() > 1:
             item = self.msg_layout.takeAt(0)
             if item.widget():

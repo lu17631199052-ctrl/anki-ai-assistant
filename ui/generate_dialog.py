@@ -31,26 +31,8 @@ from aqt.qt import (
 from aqt import mw
 from aqt.utils import showInfo, showWarning, tooltip
 
-def _parse_pdf_text_operators(raw: bytes) -> str:
-    """Parse basic PDF text operators (Tj, TJ, ') into a string."""
-    import re
-    parts: list[str] = []
-
-    for m in re.finditer(rb'\((.*?)\)\s*Tj', raw):
-        parts.append(m.group(1).decode("latin-1", errors="replace"))
-
-    for m in re.finditer(rb'\[(.*?)\]\s*TJ', raw):
-        arr = m.group(1)
-        for sm in re.finditer(rb'\((.*?)\)', arr):
-            parts.append(sm.group(1).decode("latin-1", errors="replace"))
-
-    for m in re.finditer(rb'\((.*?)\)\s*\'', raw):
-        parts.append(m.group(1).decode("latin-1", errors="replace"))
-
-    return "".join(parts)
-
-
 from ..features.generate import generate_cards, add_cards_to_deck
+from ..utils.file_parser import parse_file_to_text
 
 
 class GenerateWorker(QThread):
@@ -582,7 +564,6 @@ class GenerateDialog(QDialog):
         return super().eventFilter(obj, event)
 
     def _paste_image_from_clipboard(self) -> bool:
-        from aqt.qt import QImage
         import tempfile
         import os
 
@@ -601,7 +582,27 @@ class GenerateDialog(QDialog):
         img.save(tmp_path, "PNG")
 
         try:
-            self._load_image_file(tmp_path)
+            from ..config import get_vision_config
+            vc = get_vision_config()
+            vision_config = {
+                "base_url": vc["base_url"],
+                "api_key": vc["api_key"],
+                "model": vc["model"],
+            } if vc.get("api_key") else None
+
+            def progress(msg):
+                self.gen_status.setText(msg)
+
+            text = parse_file_to_text(tmp_path, vision_config=vision_config, progress_callback=progress)
+            if text:
+                existing = self.text_edit.toPlainText()
+                if existing.strip():
+                    text = existing + "\n\n" + text
+                self.text_edit.setPlainText(text)
+                tooltip(f"已识别：{len(text)} 字符")
+                self.deck_combo.clear()
+                for deck in mw.col.decks.all_names_and_ids():
+                    self.deck_combo.addItem(deck.name, deck.id)
         finally:
             os.unlink(tmp_path)
         return True
@@ -612,260 +613,56 @@ class GenerateDialog(QDialog):
 
     def _upload_file(self) -> None:
         from aqt.qt import QFileDialog
-        import base64
         import os
-        import subprocess
 
         path, _ = QFileDialog.getOpenFileName(
             self,
             "选择文件",
             "",
-            "所有支持的文件 (*.txt *.md *.py *.json *.csv *.pdf *.png *.jpg *.jpeg *.gif *.bmp);;文本文件 (*.txt *.md);;PDF 文件 (*.pdf);;图片文件 (*.png *.jpg *.jpeg *.gif *.bmp);;所有文件 (*)"
+            "所有支持的文件 (*.txt *.md *.py *.json *.csv *.pdf *.docx *.png *.jpg *.jpeg *.gif *.bmp);;文本文件 (*.txt *.md);;PDF 文件 (*.pdf);;Word 文档 (*.docx);;图片文件 (*.png *.jpg *.jpeg *.gif *.bmp);;所有文件 (*)"
         )
         if not path:
             return
 
-        ext = os.path.splitext(path)[1].lower()
         self.upload_btn.setEnabled(False)
         self.gen_status.setText("读取文件中...")
 
         try:
-            if ext in (".txt", ".md", ".py", ".json", ".csv", ".xml", ".html", ".css", ".js", ".ts"):
-                self._load_text_file(path)
-            elif ext == ".pdf":
-                self._load_pdf_file(path)
-            elif ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
-                self._load_image_file(path)
-            else:
-                self._load_text_file(path)
+            from ..config import get_vision_config
+
+            vc = get_vision_config()
+            vision_config = {
+                "base_url": vc["base_url"],
+                "api_key": vc["api_key"],
+                "model": vc["model"],
+            } if vc.get("api_key") else None
+
+            def progress(msg):
+                self.gen_status.setText(msg)
+
+            text = parse_file_to_text(path, vision_config=vision_config, progress_callback=progress)
+
+            if not text.strip():
+                raise RuntimeError("未能从文件中提取到文字内容")
+
+            existing = self.text_edit.toPlainText()
+            if existing.strip():
+                text = existing + "\n\n" + text
+            self.text_edit.setPlainText(text)
+
+            ext = os.path.splitext(path)[1].lower()
+            if ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
+                # Refresh deck list for image OCR (existing behavior)
+                self.deck_combo.clear()
+                for deck in mw.col.decks.all_names_and_ids():
+                    self.deck_combo.addItem(deck.name, deck.id)
+
+            tooltip(f"已加载：{len(text)} 字符")
         except Exception as e:
             showWarning(f"读取文件失败：{e}", parent=self)
         finally:
             self.upload_btn.setEnabled(True)
             self.gen_status.setText("")
-
-    def _load_text_file(self, path: str) -> None:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-        existing = self.text_edit.toPlainText()
-        if existing.strip():
-            content = existing + "\n\n" + content
-        self.text_edit.setPlainText(content)
-        tooltip(f"已加载：{len(content)} 字符")
-
-    def _load_pdf_file(self, path: str) -> None:
-        import subprocess
-        import os
-        import shutil
-
-        pdftotext_bin = None
-        for candidate in [
-            "/opt/homebrew/bin/pdftotext",
-            "/usr/local/bin/pdftotext",
-        ]:
-            if os.path.isfile(candidate):
-                pdftotext_bin = candidate
-                break
-        if pdftotext_bin is None:
-            pdftotext_bin = shutil.which("pdftotext")
-        if pdftotext_bin is None and os.name == "nt":
-            for candidate in [
-                r"C:\Program Files\poppler\bin\pdftotext.exe",
-                r"C:\poppler\bin\pdftotext.exe",
-            ]:
-                if os.path.isfile(candidate):
-                    pdftotext_bin = candidate
-                    break
-
-        if pdftotext_bin is not None:
-            result = subprocess.run(
-                [pdftotext_bin, "-layout", path, "-"],
-                capture_output=True, text=True, timeout=30
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                text = result.stdout.strip()
-                existing = self.text_edit.toPlainText()
-                if existing.strip():
-                    text = existing + "\n\n" + text
-                self.text_edit.setPlainText(text)
-                tooltip(f"已提取：{len(text)} 字符")
-                return
-
-        text = self._extract_pdf_text_pure(path)
-        if text:
-            existing = self.text_edit.toPlainText()
-            if existing.strip():
-                text = existing + "\n\n" + text
-            self.text_edit.setPlainText(text)
-            tooltip(f"已提取：{len(text)} 字符")
-            return
-
-        images = self._extract_pdf_images(path)
-        if not images:
-            raise RuntimeError("PDF 中未提取到文字，也找不到嵌入图片。请尝试用截图方式。")
-
-        self.gen_status.setText(f"扫描版 PDF，正在识别 {len(images)} 页...")
-        tooltip(f"检测到扫描版 PDF，正在逐页识别（共 {len(images)} 页）...")
-        all_text: list[str] = []
-        for i, img_path in enumerate(images):
-            self.gen_status.setText(f"正在识别第 {i + 1}/{len(images)} 页...")
-            try:
-                page_text = self._run_vision_ocr(img_path)
-                if page_text.strip():
-                    all_text.append(page_text.strip())
-            finally:
-                os.unlink(img_path)
-
-        if not all_text:
-            raise RuntimeError("AI 未能识别出图片中的文字")
-
-        text = "\n\n".join(all_text)
-        existing = self.text_edit.toPlainText()
-        if existing.strip():
-            text = existing + "\n\n" + text
-        self.text_edit.setPlainText(text)
-        tooltip(f"已识别 {len(images)} 页，共 {len(text)} 字符")
-
-    def _run_vision_ocr(self, img_path: str) -> str:
-        import base64
-        import os
-
-        ext = os.path.splitext(img_path)[1].lower()
-        mime_map = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png"}
-        mime = mime_map.get(ext, "jpeg")
-        with open(img_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode("ascii")
-        data_url = f"data:image/{mime};base64,{img_b64}"
-
-        from ..config import get_vision_config
-        from ..llm.base import LLMMessage
-        from ..llm.openai_compat import OpenAICompatProvider
-
-        vc = get_vision_config()
-        client = OpenAICompatProvider(base_url=vc["base_url"], api_key=vc["api_key"])
-        msg = LLMMessage(
-            role="user",
-            content="请提取这张图片中的所有文字内容，保持原有格式。如果是表格请用 Markdown 表格格式输出。只输出文字，不要添加额外说明。",
-            images=[data_url],
-        )
-        response = client.chat([msg], model=vc["model"], temperature=0.1, max_tokens=4096)
-        return response.content.strip()
-
-    @staticmethod
-    def _extract_pdf_images(path: str) -> list[str]:
-        import re
-        import tempfile
-        import os
-
-        images: list[str] = []
-        with open(path, "rb") as f:
-            data = f.read()
-
-        dct_pattern = re.compile(rb'/Filter\s*/DCTDecode.*?stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
-        for match in dct_pattern.finditer(data):
-            jpeg_data = match.group(1)
-            if jpeg_data[:2] == b'\xff\xd8':
-                tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-                tmp.write(jpeg_data)
-                tmp.close()
-                images.append(tmp.name)
-
-        if not images:
-            jpx_pattern = re.compile(rb'/Filter\s*/JPXDecode.*?stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
-            for match in jpx_pattern.finditer(data):
-                jpx_data = match.group(1)
-                if jpx_data[:4] == b'\x00\x00\x00\x0c':
-                    tmp = tempfile.NamedTemporaryFile(suffix=".jp2", delete=False)
-                    tmp.write(jpx_data)
-                    tmp.close()
-                    images.append(tmp.name)
-
-        return images
-
-    @staticmethod
-    def _extract_pdf_text_pure(path: str) -> str:
-        import re
-        import zlib
-
-        result: list[str] = []
-        with open(path, "rb") as f:
-            data = f.read()
-
-        text_pattern = re.compile(rb'BT(.*?)ET', re.DOTALL)
-        stream_pattern = re.compile(rb'stream\r?\n(.*?)\r?\nendstream', re.DOTALL)
-
-        for match in stream_pattern.finditer(data):
-            stream_data = match.group(1)
-            try:
-                decompressed = zlib.decompress(stream_data)
-                for text_match in text_pattern.finditer(decompressed):
-                    raw = text_match.group(1)
-                    result.append(_parse_pdf_text_operators(raw))
-            except (zlib.error, Exception):
-                for text_match in text_pattern.finditer(stream_data):
-                    raw = text_match.group(1)
-                    result.append(_parse_pdf_text_operators(raw))
-
-        if not result:
-            for text_match in text_pattern.finditer(data):
-                raw = text_match.group(1)
-                result.append(_parse_pdf_text_operators(raw))
-
-        return "\n".join(r for r in result if r.strip())
-
-    def _load_image_file(self, path: str) -> None:
-        import base64
-        import os
-
-        ext = os.path.splitext(path)[1].lower()
-        mime_map = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".gif": "gif", ".bmp": "bmp", ".webp": "webp"}
-        mime = mime_map.get(ext, "jpeg")
-
-        with open(path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode("ascii")
-        data_url = f"data:image/{mime};base64,{img_b64}"
-
-        from ..config import get_vision_config
-        from ..llm.base import LLMMessage
-        from ..llm.openai_compat import OpenAICompatProvider
-
-        vc = get_vision_config()
-        base_url = vc["base_url"]
-        api_key = vc["api_key"]
-        model = vc["model"]
-
-        if not api_key:
-            raise RuntimeError("请在设置中配置视觉模型 API Key")
-
-        provider_name = vc["provider"]
-        self.gen_status.setText(f"正在用 {provider_name} 视觉模型识别图片...")
-        tooltip("正在用 AI 识别图片中的文字，请稍候...")
-
-        client = OpenAICompatProvider(base_url=base_url, api_key=api_key)
-        msg = LLMMessage(
-            role="user",
-            content="请提取这张图片中的所有文字内容，保持原有格式。如果是表格请用 Markdown 表格格式输出。只输出文字，不要添加额外说明。",
-            images=[data_url],
-        )
-        response = client.chat(
-            [msg],
-            model=model,
-            temperature=0.1,
-            max_tokens=4096,
-        )
-
-        text = response.content.strip()
-        if not text:
-            raise RuntimeError("AI 未能识别出图片中的文字，请检查视觉模型是否支持图片识别")
-
-        existing = self.text_edit.toPlainText()
-        if existing.strip():
-            text = existing + "\n\n" + text
-        self.text_edit.setPlainText(text)
-        tooltip(f"已识别：{len(text)} 字符")
-        self.deck_combo.clear()
-        for deck in mw.col.decks.all_names_and_ids():
-            self.deck_combo.addItem(deck.name, deck.id)
 
     # ═══════════════════════════════════════════════════════════════
     # Deck / Note type population

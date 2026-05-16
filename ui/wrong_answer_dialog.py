@@ -25,6 +25,7 @@ from aqt.qt import (
 from aqt import mw
 from aqt.utils import showInfo, showWarning, tooltip
 
+from ..config import get_config, save_config
 from ..features.generate import add_cards_to_deck
 from ..features.wrong_answer import ensure_mcq_note_type, add_mcq_cards_to_deck, MCQ_NOTE_TYPE_NAME
 
@@ -123,6 +124,17 @@ class WrongAnswerDialog(QDialog):
         )
         self.paste_btn.clicked.connect(self._paste_image)
         btn_layout.addWidget(self.paste_btn)
+
+        self.clear_btn = QPushButton("🗑 清除")
+        self.clear_btn.setMinimumHeight(36)
+        self.clear_btn.setEnabled(False)
+        self.clear_btn.setStyleSheet(
+            "QPushButton { font-size: 13px; padding: 6px 14px; border: 2px dashed #E0D0D0; "
+            "border-radius: 8px; background: #FDF8F8; color: #999; } "
+            "QPushButton:hover { background: #FDF0F0; border-color: #E74C3C; color: #E74C3C; }"
+        )
+        self.clear_btn.clicked.connect(self._clear_image)
+        btn_layout.addWidget(self.clear_btn)
         img_layout.addLayout(btn_layout)
 
         # Image preview label
@@ -232,8 +244,25 @@ class WrongAnswerDialog(QDialog):
 
     def _populate_decks(self) -> None:
         self.deck_combo.clear()
+
+        items = []
         for deck in mw.col.decks.all_names_and_ids():
-            self.deck_combo.addItem(deck.name, deck.id)
+            parts = deck.name.split("::")
+            depth = len(parts) - 1
+            indent = "    " * depth
+            items.append((indent + parts[-1], deck.id, deck.name))
+
+        # Sort by full name — naturally groups children under parents
+        items.sort(key=lambda x: x[2])
+
+        last_deck_id = get_config().get("last_deck_id")
+        select_index = 0
+        for i, (display, deck_id, _) in enumerate(items):
+            self.deck_combo.addItem(display, deck_id)
+            if deck_id == last_deck_id:
+                select_index = i
+
+        self.deck_combo.setCurrentIndex(select_index)
 
     def _populate_note_types(self) -> None:
         self.note_type_combo.clear()
@@ -319,11 +348,35 @@ class WrongAnswerDialog(QDialog):
         )
 
         self.analyze_btn.setEnabled(True)
+        self.clear_btn.setEnabled(True)
         self.status_label.setText(f"已加载：{os.path.basename(path)}")
         self._cards = []
         self.front_edit.clear()
         self.back_edit.clear()
         self.add_btn.setEnabled(False)
+
+    def _clear_image(self) -> None:
+        """Clear current screenshot and reset form state."""
+        if self._cleanup_path:
+            try:
+                os.unlink(self._cleanup_path)
+            except OSError:
+                pass
+            self._cleanup_path = None
+        self._image_path = None
+        self.img_label.clear()
+        self.img_label.setText("将错题截图拖拽到上方按钮\n或点击选择 / Ctrl+V 粘贴")
+        self.img_label.setStyleSheet(
+            "QLabel { border: 1px solid #E0E4E8; border-radius: 6px; "
+            "background: #FAFBFC; color: #AAA; font-size: 13px; }"
+        )
+        self.analyze_btn.setEnabled(False)
+        self.clear_btn.setEnabled(False)
+        self.add_btn.setEnabled(False)
+        self._cards = []
+        self.front_edit.clear()
+        self.back_edit.clear()
+        self.status_label.setText("")
 
     # ═══════════════════════════════════════════════════════════════
     # Analysis
@@ -415,6 +468,8 @@ class WrongAnswerDialog(QDialog):
             tooltip(f"已添加 {added} 张卡片")
         except Exception as e:
             showWarning(f"添加卡片失败：{e}", parent=self)
+            return
+        self._clear_image()
 
     # ═══════════════════════════════════════════════════════════════
     # Cleanup
