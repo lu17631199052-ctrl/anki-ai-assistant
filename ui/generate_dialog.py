@@ -26,9 +26,10 @@ from aqt.qt import (
     QColorDialog,
     QShortcut,
     QKeySequence,
-    QStandardItemModel,
-    QStandardItem,
-    QTreeView,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QGraphicsDropShadowEffect,
+    QColor,
     Qt,
 )
 from aqt import mw
@@ -210,13 +211,58 @@ class GenerateDialog(QDialog):
         selector_row = QHBoxLayout()
         selector_row.setSpacing(8)
         selector_row.addWidget(QLabel("牌组:"))
-        self.deck_combo = QComboBox()
-        self.deck_combo.setMinimumWidth(180)
-        self.deck_combo.setStyleSheet(
-            "QComboBox { border: 1px solid #D0D5DD; border-radius: 5px; padding: 4px 8px; background: #FFF; }"
+        self.deck_btn = QPushButton("选择牌组...")
+        self.deck_btn.setMinimumWidth(180)
+        self.deck_btn.setStyleSheet(
+            "QPushButton { font-size: 13px; padding: 6px 12px; border: 1px solid #D0D5DD; "
+            "border-radius: 5px; background: #FFF; text-align: left; } "
+            "QPushButton:hover { border-color: #4A90D9; }"
         )
+        self.deck_btn.clicked.connect(self._show_deck_popup)
+        selector_row.addWidget(self.deck_btn)
+
+        # Deck tree popup — frameless for custom rounded styling
+        self._deck_popup = QDialog(self, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self._deck_popup.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        popup_layout = QVBoxLayout(self._deck_popup)
+        popup_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Container frame with rounded border + shadow
+        self._popup_frame = QFrame()
+        self._popup_frame.setObjectName("deckPopupFrame")
+        self._popup_frame.setStyleSheet(
+            "#deckPopupFrame {"
+            "  border: 1px solid #D0D5DD;"
+            "  border-radius: 10px;"
+            "  background: #FFF;"
+            "}"
+        )
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(16)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self._popup_frame.setGraphicsEffect(shadow)
+
+        frame_layout = QVBoxLayout(self._popup_frame)
+        frame_layout.setContentsMargins(6, 6, 6, 6)
+
+        self._deck_tree = QTreeWidget()
+        self._deck_tree.setHeaderHidden(True)
+        self._deck_tree.setIndentation(16)
+        self._deck_tree.setRootIsDecorated(True)
+        self._deck_tree.setAnimated(True)
+        self._deck_tree.setStyleSheet(
+            "QTreeWidget { border: none; background: transparent; font-size: 13px; } "
+            "QTreeWidget::item { padding: 5px 8px; border-radius: 5px; } "
+            "QTreeWidget::item:hover { background: #F0F4FF; } "
+            "QTreeWidget::item:selected { background: #E8EDF9; color: #000; } "
+        )
+        self._deck_tree.itemClicked.connect(self._on_deck_item_clicked)
+        self._deck_tree.itemDoubleClicked.connect(self._on_deck_item_double_clicked)
+        frame_layout.addWidget(self._deck_tree)
+        popup_layout.addWidget(self._popup_frame)
+
         self._populate_decks()
-        selector_row.addWidget(self.deck_combo)
 
         selector_row.addWidget(QLabel("笔记类型:"))
         self.note_type_combo = QComboBox()
@@ -670,79 +716,98 @@ class GenerateDialog(QDialog):
     # ═══════════════════════════════════════════════════════════════
 
     def _populate_decks(self) -> None:
-        self.deck_combo.clear()
-        self.deck_combo.setEditable(True)
-        self.deck_combo.lineEdit().setReadOnly(True)
+        self._deck_tree.clear()
 
-        model = QStandardItemModel()
-        item_map: dict[str, QStandardItem] = {}
+        item_map: dict[str, QTreeWidgetItem] = {}
+        last_deck_id = get_config().get("last_deck_id")
+        target_item = None
 
         for deck in mw.col.decks.all_names_and_ids():
             parts = deck.name.split("::")
-            item = QStandardItem(parts[-1])
-            item.setData(deck.id, Qt.ItemDataRole.UserRole)
-            item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+            item = QTreeWidgetItem([parts[-1]])
+            item.setData(0, Qt.ItemDataRole.UserRole, deck.id)
             item_map[deck.name] = item
+
+            if deck.id == last_deck_id:
+                target_item = item
 
             if "::" in deck.name:
                 parent_name = deck.name.rsplit("::", 1)[0]
                 parent = item_map.get(parent_name)
                 if parent:
-                    parent.appendRow(item)
+                    parent.addChild(item)
                     continue
-            model.appendRow(item)
+            self._deck_tree.addTopLevelItem(item)
 
-        view = QTreeView()
-        view.setHeaderHidden(True)
-        view.setIndentation(16)
-        view.clicked.connect(self._on_deck_tree_clicked)
+        self._deck_tree.sortItems(0, Qt.SortOrder.AscendingOrder)
 
-        self.deck_combo.setModel(model)
-        self.deck_combo.setView(view)
-
-        last_deck_id = get_config().get("last_deck_id")
-        if last_deck_id is not None:
-            self._select_deck_in_tree(model, view, last_deck_id)
+        if target_item is not None:
+            self._select_deck_item(target_item)
         else:
-            self.deck_combo.setEditText("")
+            self._selected_deck_id = None
+            self.deck_btn.setText("选择牌组...")
 
-    def _on_deck_tree_clicked(self, idx):
-        model = self.deck_combo.model()
-        if model is None:
+    def _show_deck_popup(self) -> None:
+        btn_rect = self.deck_btn.rect()
+
+        screen = QApplication.primaryScreen()
+        screen_geo = screen.availableGeometry() if screen is not None else None
+
+        popup_w = max(self.deck_btn.width(), 260)
+        self._deck_popup.setFixedWidth(popup_w)
+
+        row_h = self._deck_tree.sizeHintForRow(0)
+        if row_h <= 0:
+            row_h = self._deck_tree.fontMetrics().height() + 10
+        count = self._count_tree_items(self._deck_tree.invisibleRootItem())
+        tree_h = max(min(row_h * max(count, 1) + 16, 500), 120)
+        self._deck_tree.setMinimumHeight(tree_h)
+        self._deck_tree.setMaximumHeight(tree_h)
+
+        # Account for frame padding (6+6)
+        popup_h = tree_h + 12
+
+        # Position below the button
+        pos = self.deck_btn.mapToGlobal(btn_rect.bottomLeft())
+
+        # Adjust if popup would go off screen
+        if screen_geo is not None:
+            if pos.y() + popup_h > screen_geo.bottom():
+                pos.setY(max(0, screen_geo.bottom() - popup_h))
+            if pos.x() + popup_w > screen_geo.right():
+                pos.setX(max(0, screen_geo.right() - popup_w))
+
+        self._deck_popup.move(pos)
+        self._deck_popup.show()
+
+    def _count_tree_items(self, parent: QTreeWidgetItem) -> int:
+        """Count all visible items recursively for height estimation."""
+        count = 0
+        for i in range(parent.childCount()):
+            child = parent.child(i)
+            count += 1
+            if child.isExpanded():
+                count += self._count_tree_items(child)
+        return count
+
+    def _on_deck_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        if item.childCount() > 0:
+            item.setExpanded(not item.isExpanded())
             return
-        item = model.itemFromIndex(idx)
-        if item is None:
+        self._select_deck_item(item)
+        self._deck_popup.hide()
+
+    def _on_deck_item_double_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        self._select_deck_item(item)
+        self._deck_popup.hide()
+
+    def _select_deck_item(self, item: QTreeWidgetItem) -> None:
+        deck_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if deck_id is None:
             return
-        self._selected_deck_id = item.data(Qt.ItemDataRole.UserRole)
-        self.deck_combo.setEditText(item.text())
-        self.deck_combo.hidePopup()
-
-    def _select_deck_in_tree(self, model, view, deck_id):
-        """Find item with matching deck_id and select it, expanding ancestors."""
-        def search(parent):
-            for row in range(parent.rowCount()):
-                item = parent.child(row)
-                if item.data(Qt.ItemDataRole.UserRole) == deck_id:
-                    return item
-                found = search(item)
-                if found:
-                    return found
-            return None
-
-        item = search(model.invisibleRootItem())
-        if item is None:
-            return
-
         self._selected_deck_id = deck_id
-        self.deck_combo.setEditText(item.text())
-
-        idx = item.index()
-        p = idx.parent()
-        while p.isValid():
-            view.expand(p)
-            p = p.parent()
-
-        view.setCurrentIndex(idx)
+        self.deck_btn.setText(item.text(0))
+        self._deck_tree.setCurrentItem(item)
 
     def _populate_note_types(self) -> None:
         self.note_type_combo.clear()

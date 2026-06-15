@@ -80,8 +80,8 @@ def _on_reviewer_did_show(card) -> None:
     global _shortcut_registered
     if _shortcut_registered:
         return
-    _shortcut_registered = True
 
+    import sys
     from aqt.qt import QShortcut, QKeySequence
     from .features.explain import explain_current_card
 
@@ -89,11 +89,37 @@ def _on_reviewer_did_show(card) -> None:
     if reviewer is None:
         return
 
-    shortcut_e = QShortcut(QKeySequence("Ctrl+E"), reviewer.web)
-    qconnect(shortcut_e.activated, lambda: explain_current_card(mw))
+    # On macOS, Qt maps "Ctrl" → Cmd (⌘); use "Meta" to get the real Control (^) key.
+    # On Windows, "Ctrl+<key>" conflicts with Anki built-in shortcuts
+    # (Ctrl+Q=Quit, Ctrl+W=Close window, Ctrl+E=Export), so use Ctrl+Shift instead.
+    if sys.platform == "darwin":
+        _explain_key = "Meta+W"
+        _wrong_key = "Meta+R"
+        _chat_key = "Meta+Q"
+        _generate_key = "Meta+E"
+    else:
+        _explain_key = "Ctrl+Shift+W"
+        _wrong_key = "Ctrl+Shift+R"
+        _chat_key = "Ctrl+Shift+Q"
+        _generate_key = "Ctrl+Shift+E"
 
-    shortcut_w = QShortcut(QKeySequence("Ctrl+W"), reviewer.web)
-    qconnect(shortcut_w.activated, _open_wrong_answer)
+    # AI 解释当前卡片
+    shortcut_explain = QShortcut(QKeySequence(_explain_key), reviewer.web)
+    qconnect(shortcut_explain.activated, lambda: explain_current_card(mw))
+
+    # AI 错题整理
+    shortcut_wrong = QShortcut(QKeySequence(_wrong_key), reviewer.web)
+    qconnect(shortcut_wrong.activated, _open_wrong_answer)
+
+    # AI 对话
+    shortcut_chat = QShortcut(QKeySequence(_chat_key), reviewer.web)
+    qconnect(shortcut_chat.activated, _open_chat)
+
+    # AI 生成卡片
+    shortcut_generate = QShortcut(QKeySequence(_generate_key), reviewer.web)
+    qconnect(shortcut_generate.activated, _open_generate)
+
+    _shortcut_registered = True
 
 
 gui_hooks.reviewer_did_show_question.append(_on_reviewer_did_show)
