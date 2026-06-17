@@ -5,6 +5,7 @@ import re
 import zlib
 import tempfile
 import subprocess
+import platform
 import shutil
 import base64
 from typing import Callable, Optional
@@ -173,9 +174,12 @@ def parse_file_to_text(
                     break
 
         if pdftotext_bin is not None:
+            kwargs = dict(capture_output=True, text=True, timeout=30)
+            if platform.system() == "Windows":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
             result = subprocess.run(
                 [pdftotext_bin, "-layout", path, "-"],
-                capture_output=True, text=True, timeout=30,
+                **kwargs,
             )
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()

@@ -116,13 +116,15 @@ def _request_via_curl(
         "--max-time", str(timeout),
     ]
 
-    result = subprocess.run(
-        cmd,
+    kwargs = dict(
         input=data.encode("utf-8"),
         capture_output=True,
         timeout=timeout + 15,
         text=False,
     )
+    if platform.system() == "Windows":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # 阻止弹出黑色终端框
+    result = subprocess.run(cmd, **kwargs)
     stdout = result.stdout.decode("utf-8", errors="replace")
     stderr = result.stderr.decode("utf-8", errors="replace")
 
@@ -167,12 +169,14 @@ def _stream_via_curl(
         "--max-time", str(timeout),
     ]
 
-    proc = subprocess.Popen(
-        cmd,
+    popen_kwargs = dict(
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+    if platform.system() == "Windows":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # 阻止弹出黑色终端框
+    proc = subprocess.Popen(cmd, **popen_kwargs)
     got_content = False
     got_done = False
     chunk_count = 0

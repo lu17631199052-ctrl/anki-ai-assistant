@@ -251,14 +251,28 @@ def _show_log_dialog(parent=None) -> None:
     info_layout.addWidget(info_label)
     info_layout.addStretch()
 
-    copy_path_btn = QPushButton("复制路径")
-    copy_path_btn.setObjectName("outline")
-    copy_path_btn.setMinimumHeight(28)
-    copy_path_btn.clicked.connect(lambda: (
-        QApplication.clipboard().setText(log_path),
-        tooltip("路径已复制")
+    # Read raw log content first (for clipboard)
+    raw_content = ""
+    try:
+        if os.path.exists(log_path):
+            fsize = os.path.getsize(log_path)
+            read_size = min(fsize, 100 * 1024)
+            with open(log_path, "r", encoding="utf-8") as f:
+                if fsize > read_size:
+                    f.seek(fsize - read_size)
+                    f.readline()
+                raw_content = f.read()
+    except Exception:
+        raw_content = ""
+
+    copy_btn = QPushButton("复制日志内容")
+    copy_btn.setObjectName("warn")
+    copy_btn.setMinimumHeight(28)
+    copy_btn.clicked.connect(lambda: (
+        QApplication.clipboard().setText(raw_content),
+        tooltip("日志已复制，可直接粘贴发送")
     ))
-    info_layout.addWidget(copy_path_btn)
+    info_layout.addWidget(copy_btn)
     layout.addLayout(info_layout)
 
     # Log content browser
@@ -276,34 +290,22 @@ def _show_log_dialog(parent=None) -> None:
         }
     """)
 
-    try:
-        if os.path.exists(log_path):
-            # Read last ~100KB for performance
-            fsize = os.path.getsize(log_path)
-            read_size = min(fsize, 100 * 1024)
-            with open(log_path, "r", encoding="utf-8") as f:
-                if fsize > read_size:
-                    f.seek(fsize - read_size)
-                    # Skip partial first line
-                    f.readline()
-                content = f.read()
-            # Escape HTML entities for safe display
-            content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            # Highlight error/warning lines
-            content = content.replace(
-                "[ERROR]", '<span style="color:#F44747;">[ERROR]</span>'
-            ).replace(
-                "[WARNING]", '<span style="color:#CCA700;">[WARNING]</span>'
-            )
-            if fsize > read_size:
-                header = f'<pre style="color:#888;">... 文件共 {fsize / 1024:.0f} KB，仅显示最近 {read_size / 1024:.0f} KB</pre>'
-                browser.setHtml(f"{header}<pre>{content}</pre>")
-            else:
-                browser.setHtml(f"<pre>{content}</pre>")
+    if raw_content:
+        # Escape HTML entities for safe display
+        content = raw_content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        # Highlight error/warning lines
+        content = content.replace(
+            "[ERROR]", '<span style="color:#F44747;">[ERROR]</span>'
+        ).replace(
+            "[WARNING]", '<span style="color:#CCA700;">[WARNING]</span>'
+        )
+        if fsize > read_size:
+            header = f'<pre style="color:#888;">... 文件共 {fsize / 1024:.0f} KB，仅显示最近 {read_size / 1024:.0f} KB</pre>'
+            browser.setHtml(f"{header}<pre>{content}</pre>")
         else:
-            browser.setHtml("<p style='color:#888;'>日志文件尚未创建。使用一次插件功能后会自动生成。</p>")
-    except Exception as e:
-        browser.setHtml(f"<p style='color:#F44747;'>读取日志失败: {e}</p>")
+            browser.setHtml(f"<pre>{content}</pre>")
+    else:
+        browser.setHtml("<p style='color:#888;'>日志文件尚未创建。使用一次插件功能后会自动生成。</p>")
 
     layout.addWidget(browser)
 
