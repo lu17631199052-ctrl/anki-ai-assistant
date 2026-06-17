@@ -10,6 +10,9 @@ from ..config import get_config, get_active_base_url, get_active_api_key, get_ac
 from ..llm.base import LLMMessage
 from ..llm.openai_compat import OpenAICompatProvider
 from ..ui.markdown import md_to_html as _simple_md_to_html
+from ..utils.logger import get_logger
+
+_log = get_logger()
 
 EXPLAIN_SYSTEM_PROMPT = """你是一个知识渊博的学习助手。用户会给你一张 Anki 卡片的内容（正面和背面），你需要：
 
@@ -105,6 +108,7 @@ def explain_current_card(main_window=None) -> None:
                 emitter.chunk_ready.emit(chunk)
             emitter.stream_done.emit()
         except Exception as e:
+            _log.warning(f"[explain] 流式失败，准备回退到非流式: {e}")
             # Stream failed — fall back to non-streaming (has its own retry)
             try:
                 response = client.chat(
@@ -114,13 +118,16 @@ def explain_current_card(main_window=None) -> None:
                     max_tokens=cfg.get("max_tokens", 4096),
                 )
                 if response.content:
+                    _log.info(f"[explain] 非流式回退成功: {len(response.content)} 字符")
                     emitter.chunk_ready.emit(
                         f"\n\n---\n\n⚠️ 流式响应中断，已自动重新获取完整回复：\n\n{response.content}"
                     )
                     emitter.stream_done.emit()
                 else:
+                    _log.error(f"[explain] 非流式回退返回空: {e}")
                     emitter.request_failed.emit(str(e))
             except Exception as e2:
+                _log.error(f"[explain] 非流式回退也失败: {e2}")
                 emitter.request_failed.emit(f"流式失败且回退也失败: {e2}")
         finally:
             emitter.deleteLater()

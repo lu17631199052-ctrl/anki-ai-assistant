@@ -1,5 +1,7 @@
 """Settings dialog for API provider configuration."""
 
+import os
+
 from aqt.qt import (
     QDialog,
     QVBoxLayout,
@@ -15,9 +17,11 @@ from aqt.qt import (
     QSpinBox,
     QCheckBox,
     QWidget,
+    QTextBrowser,
     Qt,
+    QApplication,
 )
-from aqt.utils import showInfo, showWarning
+from aqt.utils import showInfo, showWarning, tooltip
 from aqt import mw
 
 from ..config import (
@@ -27,6 +31,7 @@ from ..config import (
     get_provider_preset,
 )
 from ..llm.openai_compat import OpenAICompatProvider
+from ..utils.logger import get_log_file
 
 
 class SettingsDialog(QDialog):
@@ -199,6 +204,12 @@ class SettingsDialog(QDialog):
         self.test_btn.setMinimumHeight(36)
         btn_layout.addWidget(self.test_btn)
 
+        self.log_btn = QPushButton("📋 查看日志")
+        self.log_btn.setObjectName("outline")
+        self.log_btn.clicked.connect(self._show_log)
+        self.log_btn.setMinimumHeight(36)
+        btn_layout.addWidget(self.log_btn)
+
         btn_layout.addStretch()
 
         self.save_btn = QPushButton("保存")
@@ -218,6 +229,90 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_layout)
 
         layout.addLayout(btn_layout)
+
+    def _show_log(self) -> None:
+        """Open a dialog showing the plugin log file content."""
+        log_path = get_log_file()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("插件日志")
+        dialog.setMinimumSize(680, 500)
+        layout = QVBoxLayout(dialog)
+
+        # Info bar: log path + copy button
+        info_layout = QHBoxLayout()
+        info_label = QLabel(f"日志文件: {log_path}")
+        info_label.setStyleSheet("color: #666; font-size: 12px;")
+        info_layout.addWidget(info_label)
+        info_layout.addStretch()
+
+        copy_path_btn = QPushButton("复制路径")
+        copy_path_btn.setObjectName("outline")
+        copy_path_btn.setMinimumHeight(28)
+        copy_path_btn.clicked.connect(lambda: (
+            QApplication.clipboard().setText(log_path),
+            tooltip("路径已复制")
+        ))
+        info_layout.addWidget(copy_path_btn)
+        layout.addLayout(info_layout)
+
+        # Log content browser
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setStyleSheet("""
+            QTextBrowser {
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 12px;
+                background: #1E1E1E;
+                color: #D4D4D4;
+                border: 1px solid #444;
+                border-radius: 4px;
+                padding: 8px;
+            }
+        """)
+
+        try:
+            if os.path.exists(log_path):
+                # Read last ~100KB for performance
+                fsize = os.path.getsize(log_path)
+                read_size = min(fsize, 100 * 1024)
+                with open(log_path, "r", encoding="utf-8") as f:
+                    if fsize > read_size:
+                        f.seek(fsize - read_size)
+                        # Skip partial first line
+                        f.readline()
+                    content = f.read()
+                # Escape HTML entities for safe display
+                content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                # Highlight error/warning lines
+                content = content.replace(
+                    "[ERROR]", '<span style="color:#F44747;">[ERROR]</span>'
+                ).replace(
+                    "[WARNING]", '<span style="color:#CCA700;">[WARNING]</span>'
+                )
+                if fsize > read_size:
+                    header = f'<pre style="color:#888;">... 文件共 {fsize / 1024:.0f} KB，仅显示最近 {read_size / 1024:.0f} KB</pre>'
+                    browser.setHtml(f"{header}<pre>{content}</pre>")
+                else:
+                    browser.setHtml(f"<pre>{content}</pre>")
+            else:
+                browser.setHtml("<p style='color:#888;'>日志文件尚未创建。使用一次插件功能后会自动生成。</p>")
+        except Exception as e:
+            browser.setHtml(f"<p style='color:#F44747;'>读取日志失败: {e}</p>")
+
+        layout.addWidget(browser)
+
+        # Close button
+        close_btn = QPushButton("关闭")
+        close_btn.setObjectName("primary")
+        close_btn.clicked.connect(dialog.accept)
+        close_btn.setMinimumHeight(36)
+        close_btn.setMinimumWidth(100)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+        dialog.show()
 
     def _load_config(self) -> None:
         idx = self.provider_combo.findData(self.cfg.get("provider", "deepseek"))

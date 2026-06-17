@@ -3,9 +3,16 @@ AI Study Assistant - Anki addon for AI-powered study features.
 Supports DeepSeek, Qwen, Zhipu, Moonshot, Ollama, and custom APIs.
 """
 
+import os
+
 from aqt import mw, gui_hooks
 from aqt.utils import qconnect
 from aqt.qt import QAction, QMenu
+
+# Initialize logging as early as possible
+ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
+from .utils.logger import setup_logging
+setup_logging(ADDON_DIR)
 
 # Delay heavy imports until features are actually used
 

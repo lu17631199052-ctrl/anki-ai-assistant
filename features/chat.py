@@ -3,6 +3,9 @@
 from ..config import get_config, get_active_base_url, get_active_api_key, get_active_model
 from ..llm.base import LLMMessage
 from ..llm.openai_compat import OpenAICompatProvider
+from ..utils.logger import get_logger
+
+_log = get_logger()
 
 CHAT_SYSTEM_PROMPT = """你是一个 Anki 学习助手，帮助用户理解和记忆学习材料。你可以：
 
@@ -57,7 +60,9 @@ class ChatSession:
             parts.append(f"【{name}】\n{self.doc_context}\n\n{grounding}")
         if self.card_context:
             parts.append(self.card_context)
-        self.messages[0] = LLMMessage(role="system", content="\n\n".join(parts))
+        prompt = "\n\n".join(parts)
+        _log.debug(f"[chat] 系统提示词长度: {len(prompt)} 字符 (doc={bool(self.doc_context)} card={bool(self.card_context)})")
+        self.messages[0] = LLMMessage(role="system", content=prompt)
 
     def send(self, user_message: str) -> str:
         """Send a message and get the response. Non-streaming."""
@@ -116,8 +121,9 @@ class ChatSession:
                 if chunk:
                     full_response += chunk
                     yield chunk
-        except Exception:
+        except Exception as e:
             stream_failed = True
+            _log.warning(f"[chat] 流式失败，准备回退到非流式: {e}")
 
         if stream_failed:
             # Fallback: non-streaming request (has its own retry logic)
@@ -129,9 +135,11 @@ class ChatSession:
                     max_tokens=cfg.get("max_tokens", 4096),
                 )
                 full_response = response.content
+                _log.info(f"[chat] 非流式回退成功: {len(full_response)} 字符")
                 # Signal to the UI that this is a replacement (full response)
                 yield "\n\n---\n\n⚠️ 流式响应中断，已自动重新获取完整回复：\n\n" + full_response
             except Exception as e2:
+                _log.error(f"[chat] 非流式回退也失败: {e2}")
                 raise RuntimeError(f"流式响应失败，非流式回退也失败: {e2}") from e2
 
         self.messages.append(LLMMessage(role="assistant", content=full_response))

@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 UPLOAD.md
 user_config.json
+plugin.log*

@@ -17,6 +17,9 @@ from urllib.error import URLError, HTTPError
 from http.client import IncompleteRead
 
 from .base import BaseLLMProvider, LLMMessage, LLMResponse
+from ..utils.logger import get_logger, mask_key, request_summary, log_exception
+
+_log = get_logger()
 
 
 def _find_curl() -> Optional[str]:
@@ -54,6 +57,7 @@ def _request_via_urllib(
     ctx.verify_mode = ssl.CERT_NONE
 
     try:
+        _log.info(f"[urllib] 请求: {request_summary(payload)} timeout={timeout}s")
         resp = urlopen(req, timeout=timeout, context=ctx)
         body = resp.read().decode("utf-8")
         status = resp.getcode()
@@ -63,7 +67,9 @@ def _request_via_urllib(
                 msg = err.get("error", {}).get("message", body[:500])
             except Exception:
                 msg = body[:500]
+            _log.error(f"[urllib] HTTP {status}: {msg}")
             raise RuntimeError(f"API 错误 ({status}): {msg}")
+        _log.info(f"[urllib] 成功: {len(body)} bytes")
         return body
     except HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
@@ -72,12 +78,15 @@ def _request_via_urllib(
             msg = err.get("error", {}).get("message", error_body)
         except Exception:
             msg = error_body[:500]
+        _log.error(f"[urllib] HTTP {e.code}: {msg}")
         raise RuntimeError(f"API 错误 ({e.code}): {msg}")
     except URLError as e:
+        _log.error(f"[urllib] 网络错误: {e.reason}")
         raise RuntimeError(f"网络错误: {e.reason}")
     except (RuntimeError, IncompleteRead):
         raise
     except Exception as e:
+        _log.error(f"[urllib] 未知错误: {e}")
         raise RuntimeError(f"请求失败: {e}")
 
 
@@ -94,6 +103,7 @@ def _request_via_curl(
         raise RuntimeError("curl not found, using fallback")
 
     data = json.dumps(payload)
+    _log.info(f"[curl] 请求: {request_summary(payload)} timeout={timeout}s")
     cmd = [
         _CURL_BIN,
         "-s",
@@ -118,11 +128,14 @@ def _request_via_curl(
 
     if result.returncode != 0:
         err_msg = stderr.strip() if stderr.strip() else f"curl exit code {result.returncode}"
+        _log.error(f"[curl] 失败: {err_msg}")
         raise RuntimeError(f"curl 请求失败: {err_msg}")
 
     if not stdout.strip():
+        _log.error("[curl] API 返回空响应")
         raise RuntimeError("API 返回空响应")
 
+    _log.info(f"[curl] 成功: {len(stdout)} bytes")
     return stdout
 
 
@@ -141,6 +154,7 @@ def _stream_via_curl(
         raise RuntimeError("curl not found")
 
     data = json.dumps(payload)
+    _log.info(f"[curl-stream] 开始: {request_summary(payload)} timeout={timeout}s")
     cmd = [
         _CURL_BIN,
         "-s",
@@ -161,6 +175,7 @@ def _stream_via_curl(
     )
     got_content = False
     got_done = False
+    chunk_count = 0
     try:
         proc.stdin.write(data.encode("utf-8"))
         proc.stdin.close()
@@ -177,11 +192,15 @@ def _stream_via_curl(
                 obj = json.loads(data_str)
                 if "error" in obj:
                     msg = obj["error"].get("message", data_str)
+                    _log.error(f"[curl-stream] API 错误: {msg}")
                     raise RuntimeError(f"API 错误: {msg}")
                 delta = obj["choices"][0].get("delta", {})
                 content = delta.get("content", "")
                 if content:
                     got_content = True
+                    chunk_count += 1
+                    if chunk_count % 50 == 0:
+                        _log.debug(f"[curl-stream] 已收到 {chunk_count} 个 chunk")
                     yield content
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
@@ -190,6 +209,7 @@ def _stream_via_curl(
         if proc.returncode != 0:
             stderr = proc.stderr.read().decode("utf-8", errors="replace")
             if stderr.strip():
+                _log.error(f"[curl-stream] curl 异常退出: {stderr.strip()}")
                 raise RuntimeError(f"curl 请求失败: {stderr.strip()}")
     finally:
         proc.stdout.close()
@@ -199,8 +219,13 @@ def _stream_via_curl(
         except Exception:
             pass
 
-    if not got_done and got_content:
+    if got_done:
+        _log.info(f"[curl-stream] 完成: {chunk_count} chunks")
+    elif got_content:
+        _log.error(f"[curl-stream] 中断: 收到 {chunk_count} chunks 但未收到 [DONE]")
         raise RuntimeError("流式响应中断：连接在接收完整回复前断开，请重试")
+    else:
+        _log.warning("[curl-stream] 结束: 未收到任何内容（模型可能拒绝回答）")
 
 
 def _stream_via_urllib(
@@ -225,7 +250,9 @@ def _stream_via_urllib(
 
     got_content = False
     got_done = False
+    chunk_count = 0
     try:
+        _log.info(f"[urllib-stream] 开始: {request_summary(payload)} timeout={timeout}s")
         resp = urlopen(req, timeout=timeout, context=ctx)
         for line in resp:
             line_str = line.decode("utf-8", errors="replace").strip()
@@ -239,11 +266,15 @@ def _stream_via_urllib(
                 obj = json.loads(data_str)
                 if "error" in obj:
                     msg = obj["error"].get("message", data_str)
+                    _log.error(f"[urllib-stream] API 错误: {msg}")
                     raise RuntimeError(f"API 错误: {msg}")
                 delta = obj["choices"][0].get("delta", {})
                 content = delta.get("content", "")
                 if content:
                     got_content = True
+                    chunk_count += 1
+                    if chunk_count % 50 == 0:
+                        _log.debug(f"[urllib-stream] 已收到 {chunk_count} 个 chunk")
                     yield content
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
@@ -254,10 +285,16 @@ def _stream_via_urllib(
             msg = err.get("error", {}).get("message", error_body)
         except Exception:
             msg = error_body[:500]
+        _log.error(f"[urllib-stream] HTTP {e.code}: {msg}")
         raise RuntimeError(f"API 错误 ({e.code}): {msg}")
 
-    if not got_done and got_content:
+    if got_done:
+        _log.info(f"[urllib-stream] 完成: {chunk_count} chunks")
+    elif got_content:
+        _log.error(f"[urllib-stream] 中断: 收到 {chunk_count} chunks 但未收到 [DONE]")
         raise RuntimeError("流式响应中断：连接在接收完整回复前断开，请重试")
+    else:
+        _log.warning("[urllib-stream] 结束: 未收到任何内容（模型可能拒绝回答）")
 
 
 def _do_request(
@@ -279,6 +316,7 @@ def _do_request(
                 except RuntimeError as e:
                     err_str = str(e)
                     if "curl exit code" in err_str or "curl 请求失败" in err_str:
+                        _log.warning(f"[retry] curl 失败，标记 _CURL_FAILED: {err_str}")
                         _CURL_FAILED = True
                     else:
                         raise
@@ -287,8 +325,11 @@ def _do_request(
         except (IncompleteRead, ConnectionResetError, TimeoutError, URLError) as e:
             last_error = e
             if attempt < 2:
-                time.sleep(1.5 * (attempt + 1))
+                wait = 1.5 * (attempt + 1)
+                _log.warning(f"[retry] 第 {attempt + 1} 次重试，等待 {wait:.1f}s: {e}")
+                time.sleep(wait)
                 continue
+            _log.error(f"[retry] 3次尝试均失败: {e}")
             raise RuntimeError(f"网络错误（已重试2次仍失败）: {e}") from e
         except RuntimeError:
             raise
@@ -385,6 +426,8 @@ class OpenAICompatProvider(BaseLLMProvider):
         last_error = None
 
         for attempt in range(2):  # 2 attempts total
+            if attempt > 0:
+                _log.info(f"[chat_stream] 第 {attempt + 1} 次尝试...")
             try:
                 if not _CURL_FAILED and _CURL_BIN:
                     try:
@@ -393,6 +436,7 @@ class OpenAICompatProvider(BaseLLMProvider):
                     except RuntimeError as e:
                         err_str = str(e)
                         if "curl exit code" in err_str or "curl 请求失败" in err_str:
+                            _log.warning(f"[chat_stream] curl-stream 失败，标记 _CURL_FAILED: {err_str}")
                             _CURL_FAILED = True
                         else:
                             raise
@@ -402,13 +446,16 @@ class OpenAICompatProvider(BaseLLMProvider):
             except (IncompleteRead, ConnectionResetError, TimeoutError, URLError) as e:
                 last_error = e
                 if attempt < 1:
+                    _log.warning(f"[chat_stream] 网络错误，将重试: {e}")
                     time.sleep(1.5)
                     continue
             except RuntimeError as e:
                 # Stream interrupted (e.g. no [DONE] marker) — retry once
                 last_error = e
                 if attempt < 1:
+                    _log.warning(f"[chat_stream] 流中断，将重试: {e}")
                     time.sleep(1.5)
                     continue
 
+        _log.error(f"[chat_stream] 2次尝试均失败: {last_error}")
         raise RuntimeError(f"流式请求失败（已重试）: {last_error}")
