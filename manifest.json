@@ -7,5 +7,5 @@
 	"human_version": "1.11.0",
 	"homepage": "https://github.com/lu17631199052-ctrl/anki-ai-assistant",
 	"conflicts": [],
-	"description": "全能 AI 学习助手，国内直连 DeepSeek/通义千问/智谱/Kimi/Ollama。一键解释卡片（Ctrl+E）、AI 错题整理（Ctrl+W，截图识别+生成选择题）、AI 生成卡片（txt/md/pdf/docx/图片上传+OCR）、AI 对话（流式 Markdown+卡片上下文）。支持扫描版 PDF 视觉识别。兼容 macOS / Windows。"
+	"description": "全能 AI 学习助手，国内直连 DeepSeek/通义千问/智谱/Kimi/Ollama。\n\n【复习界面快捷键】\n  AI 解释当前卡片      Mac: Control+W    Win: Ctrl+Shift+W\n  AI 错题整理          Mac: Control+R    Win: Ctrl+Shift+R\n  AI 对话             Mac: Control+Q    Win: Ctrl+Shift+Q\n  AI 生成卡片          Mac: Control+E    Win: Ctrl+Shift+E\n\nMac 用户请按 Control(^) 键而非 Command(⌘)。\nWin 用户需同时按 Ctrl+Shift 以避开 Anki 内置快捷键冲突。\n\n功能：AI 解释卡片 / 错题截图识别+生成选择题 / AI 生成卡片（txt/md/pdf/docx/图片上传+OCR）/ AI 对话（流式 Markdown+卡片上下文）。支持扫描版 PDF 视觉识别。兼容 macOS / Windows。"
 }
