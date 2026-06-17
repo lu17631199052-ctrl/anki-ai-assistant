@@ -17,9 +17,9 @@ from aqt import mw
 # When installed from AnkiWeb, the folder is a numeric ID, not the package name.
 ADDON_NAME = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
-# Local config backup — bypasses Anki's addonManager on Windows where it may
-# silently fail to persist writes.
-_LOCAL_CONFIG_PATH = os.path.join(ADDON_DIR, "user_config.json")
+# Local config backup — stored OUTSIDE the addon directory so it survives
+# Anki's delete-before-upgrade cycle.  (Same reason plugin.log lives outside.)
+_LOCAL_CONFIG_PATH = os.path.join(os.path.dirname(ADDON_DIR), "anki_ai_assistant_config.json")
 
 # Preset provider definitions
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
@@ -79,7 +79,29 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
+def _migrate_old_config() -> None:
+    """If old user_config.json exists inside the addon dir, move it to the
+    new safe location one level up (survives Anki's delete-before-upgrade)."""
+    old_path = os.path.join(ADDON_DIR, "user_config.json")
+    if not os.path.isfile(old_path):
+        return
+    import json
+    try:
+        with open(old_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        # Write to new location
+        with open(_LOCAL_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=4)
+        # Remove old file so we don't migrate again
+        os.remove(old_path)
+    except (json.JSONDecodeError, OSError):
+        pass  # Corrupt or unreadable — skip
+
+
 def get_config() -> dict[str, Any]:
+    # 0. Migrate old config from inside addon dir to new safe location
+    _migrate_old_config()
+
     # 1. Try local backup first (bypasses Anki config issues on Windows)
     cfg = _load_local_config()
     if cfg is not None:

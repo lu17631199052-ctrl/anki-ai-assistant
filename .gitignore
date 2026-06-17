@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 UPLOAD.md
 user_config.json
+anki_ai_assistant_config.json
 plugin.log*
