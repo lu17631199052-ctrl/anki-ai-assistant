@@ -127,6 +127,8 @@ def get_config() -> dict[str, Any]:
         changed = True
     if changed:
         mw.addonManager.writeConfig(ADDON_NAME, cfg)
+    # Always save to the safe local backup so it survives future upgrades
+    _save_local_config(cfg)
     return cfg
 
 
