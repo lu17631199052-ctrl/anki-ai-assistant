@@ -130,9 +130,13 @@ def _stream_via_curl(
     url: str,
     payload: dict[str, Any],
     api_key: str,
-    timeout: int = 120,
+    timeout: int = 300,
 ) -> Generator[str, None, None]:
-    """Stream SSE response via curl, yielding content chunks."""
+    """Stream SSE response via curl, yielding content chunks.
+
+    Raises RuntimeError if the stream ends without the [DONE] marker
+    (indicating an incomplete / interrupted response).
+    """
     if not _CURL_BIN:
         raise RuntimeError("curl not found")
 
@@ -156,6 +160,7 @@ def _stream_via_curl(
         stderr=subprocess.PIPE,
     )
     got_content = False
+    got_done = False
     try:
         proc.stdin.write(data.encode("utf-8"))
         proc.stdin.close()
@@ -166,6 +171,7 @@ def _stream_via_curl(
                 continue
             data_str = line_str[5:].strip()
             if data_str == "[DONE]":
+                got_done = True
                 break
             try:
                 obj = json.loads(data_str)
@@ -193,14 +199,21 @@ def _stream_via_curl(
         except Exception:
             pass
 
+    if not got_done and got_content:
+        raise RuntimeError("流式响应中断：连接在接收完整回复前断开，请重试")
+
 
 def _stream_via_urllib(
     url: str,
     payload: dict[str, Any],
     api_key: str,
-    timeout: int = 120,
+    timeout: int = 300,
 ) -> Generator[str, None, None]:
-    """Stream SSE via urllib, yielding content chunks."""
+    """Stream SSE via urllib, yielding content chunks.
+
+    Raises RuntimeError if the stream ends without the [DONE] marker
+    (indicating an incomplete / interrupted response).
+    """
     data = json.dumps(payload).encode("utf-8")
     req = Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -210,6 +223,8 @@ def _stream_via_urllib(
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
+    got_content = False
+    got_done = False
     try:
         resp = urlopen(req, timeout=timeout, context=ctx)
         for line in resp:
@@ -218,6 +233,7 @@ def _stream_via_urllib(
                 continue
             data_str = line_str[5:].strip()
             if data_str == "[DONE]":
+                got_done = True
                 break
             try:
                 obj = json.loads(data_str)
@@ -227,6 +243,7 @@ def _stream_via_urllib(
                 delta = obj["choices"][0].get("delta", {})
                 content = delta.get("content", "")
                 if content:
+                    got_content = True
                     yield content
             except (json.JSONDecodeError, KeyError, IndexError):
                 continue
@@ -238,6 +255,9 @@ def _stream_via_urllib(
         except Exception:
             msg = error_body[:500]
         raise RuntimeError(f"API 错误 ({e.code}): {msg}")
+
+    if not got_done and got_content:
+        raise RuntimeError("流式响应中断：连接在接收完整回复前断开，请重试")
 
 
 def _do_request(
@@ -344,6 +364,12 @@ class OpenAICompatProvider(BaseLLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> Generator[str, None, None]:
+        """Stream chat completion with retry and automatic fallback.
+
+        Retries once on transient errors. If streaming fails and the
+        caller has not received any content, falls back to non-streaming.
+        Raises RuntimeError if all attempts fail.
+        """
         payload: dict[str, Any] = {
             "model": model,
             "messages": [self._build_message(m) for m in messages],
@@ -353,17 +379,36 @@ class OpenAICompatProvider(BaseLLMProvider):
         }
 
         url = self._build_url("/chat/completions")
+        stream_timeout = 300
 
         global _CURL_FAILED
-        if not _CURL_FAILED and _CURL_BIN:
-            try:
-                yield from _stream_via_curl(url, payload, self.api_key, timeout=120)
-                return
-            except RuntimeError as e:
-                err_str = str(e)
-                if "curl exit code" in err_str or "curl 请求失败" in err_str:
-                    _CURL_FAILED = True
-                else:
-                    raise
+        last_error = None
 
-        yield from _stream_via_urllib(url, payload, self.api_key, timeout=120)
+        for attempt in range(2):  # 2 attempts total
+            try:
+                if not _CURL_FAILED and _CURL_BIN:
+                    try:
+                        yield from _stream_via_curl(url, payload, self.api_key, timeout=stream_timeout)
+                        return
+                    except RuntimeError as e:
+                        err_str = str(e)
+                        if "curl exit code" in err_str or "curl 请求失败" in err_str:
+                            _CURL_FAILED = True
+                        else:
+                            raise
+
+                yield from _stream_via_urllib(url, payload, self.api_key, timeout=stream_timeout)
+                return
+            except (IncompleteRead, ConnectionResetError, TimeoutError, URLError) as e:
+                last_error = e
+                if attempt < 1:
+                    time.sleep(1.5)
+                    continue
+            except RuntimeError as e:
+                # Stream interrupted (e.g. no [DONE] marker) — retry once
+                last_error = e
+                if attempt < 1:
+                    time.sleep(1.5)
+                    continue
+
+        raise RuntimeError(f"流式请求失败（已重试）: {last_error}")

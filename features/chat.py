@@ -88,7 +88,11 @@ class ChatSession:
         return response.content
 
     def send_stream(self, user_message: str):
-        """Send a message and yield response chunks. Streaming version."""
+        """Send a message and yield response chunks. Streaming version.
+
+        If streaming fails, automatically falls back to non-streaming
+        request to ensure the user gets a complete response.
+        """
         cfg = get_config()
         base_url = get_active_base_url()
         api_key = get_active_api_key()
@@ -101,15 +105,34 @@ class ChatSession:
         self.messages.append(LLMMessage(role="user", content=user_message))
 
         full_response = ""
-        for chunk in client.chat_stream(
-            self.messages,
-            model=model,
-            temperature=cfg.get("temperature", 0.7),
-            max_tokens=cfg.get("max_tokens", 4096),
-        ):
-            if chunk:
-                full_response += chunk
-                yield chunk
+        stream_failed = False
+        try:
+            for chunk in client.chat_stream(
+                self.messages,
+                model=model,
+                temperature=cfg.get("temperature", 0.7),
+                max_tokens=cfg.get("max_tokens", 4096),
+            ):
+                if chunk:
+                    full_response += chunk
+                    yield chunk
+        except Exception:
+            stream_failed = True
+
+        if stream_failed:
+            # Fallback: non-streaming request (has its own retry logic)
+            try:
+                response = client.chat(
+                    self.messages,
+                    model=model,
+                    temperature=cfg.get("temperature", 0.7),
+                    max_tokens=cfg.get("max_tokens", 4096),
+                )
+                full_response = response.content
+                # Signal to the UI that this is a replacement (full response)
+                yield "\n\n---\n\n⚠️ 流式响应中断，已自动重新获取完整回复：\n\n" + full_response
+            except Exception as e2:
+                raise RuntimeError(f"流式响应失败，非流式回退也失败: {e2}") from e2
 
         self.messages.append(LLMMessage(role="assistant", content=full_response))
 

@@ -400,7 +400,16 @@ class ChatWidget(QWidget):
         self._worker.start()
 
     def _on_chunk(self, chunk: str) -> None:
-        self._current_ai_raw += chunk
+        # Detect stream-failure fallback marker: reset partial content
+        # so the complete non-streamed response replaces (not appends to)
+        # whatever was received before the stream broke.
+        fallback_marker = "⚠️ 流式响应中断，已自动重新获取完整回复："
+        if fallback_marker in chunk:
+            # Extract only the complete response (after the marker)
+            _, _, full = chunk.partition(fallback_marker)
+            self._current_ai_raw = full
+        else:
+            self._current_ai_raw += chunk
         self._update_last_ai_message()
 
     def _on_finished(self) -> None:

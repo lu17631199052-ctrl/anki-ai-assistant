@@ -105,7 +105,23 @@ def explain_current_card(main_window=None) -> None:
                 emitter.chunk_ready.emit(chunk)
             emitter.stream_done.emit()
         except Exception as e:
-            emitter.request_failed.emit(str(e))
+            # Stream failed — fall back to non-streaming (has its own retry)
+            try:
+                response = client.chat(
+                    messages,
+                    model=model,
+                    temperature=cfg.get("temperature", 0.7),
+                    max_tokens=cfg.get("max_tokens", 4096),
+                )
+                if response.content:
+                    emitter.chunk_ready.emit(
+                        f"\n\n---\n\n⚠️ 流式响应中断，已自动重新获取完整回复：\n\n{response.content}"
+                    )
+                    emitter.stream_done.emit()
+                else:
+                    emitter.request_failed.emit(str(e))
+            except Exception as e2:
+                emitter.request_failed.emit(f"流式失败且回退也失败: {e2}")
         finally:
             emitter.deleteLater()
 
