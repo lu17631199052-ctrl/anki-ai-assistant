@@ -51,7 +51,7 @@ def generate_cards(text: str) -> list[dict[str, str]]:
         messages,
         model=model,
         temperature=cfg.get("temperature", 0.7),
-        max_tokens=cfg.get("max_tokens", 4096),
+        max_tokens=cfg.get("max_tokens", 8192),
     )
 
     cards = _parse_cards_json(response.content)

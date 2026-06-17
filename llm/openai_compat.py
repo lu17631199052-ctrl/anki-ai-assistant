@@ -396,7 +396,7 @@ class OpenAICompatProvider(BaseLLMProvider):
         messages: list[LLMMessage],
         model: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> LLMResponse:
         payload: dict[str, Any] = {
             "model": model,
@@ -427,7 +427,7 @@ class OpenAICompatProvider(BaseLLMProvider):
         messages: list[LLMMessage],
         model: str = "",
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> Generator[str, None, None]:
         """Stream chat completion with retry and automatic fallback.
 

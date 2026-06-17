@@ -84,7 +84,7 @@ def analyze_wrong_answer(image_path: str) -> list[dict[str, str]]:
         messages,
         model=vc["model"],
         temperature=0.3,
-        max_tokens=get_config().get("max_tokens", 4096),
+        max_tokens=get_config().get("max_tokens", 8192),
     )
 
     cards = _parse_cards_json(response.content)

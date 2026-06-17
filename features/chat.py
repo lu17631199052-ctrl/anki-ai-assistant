@@ -81,7 +81,7 @@ class ChatSession:
             self.messages,
             model=model,
             temperature=cfg.get("temperature", 0.7),
-            max_tokens=cfg.get("max_tokens", 4096),
+            max_tokens=cfg.get("max_tokens", 8192),
         )
 
         self.messages.append(LLMMessage(role="assistant", content=response.content))
@@ -102,7 +102,7 @@ class ChatSession:
         base_url = get_active_base_url()
         api_key = get_active_api_key()
         model = get_active_model()
-        max_tokens = cfg.get("max_tokens", 4096)
+        max_tokens = cfg.get("max_tokens", 8192)
 
         if not api_key and cfg.get("provider") != "ollama":
             raise RuntimeError("请先在设置中配置 API Key")

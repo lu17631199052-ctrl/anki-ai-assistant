@@ -103,7 +103,7 @@ def _run_vision_ocr(
         content="请提取这张图片中的所有文字内容，保持原有格式。如果是表格请用 Markdown 表格格式输出。只输出文字，不要添加额外说明。",
         images=[data_url],
     )
-    response = client.chat([msg], model=model, temperature=0.1, max_tokens=4096)
+    response = client.chat([msg], model=model, temperature=0.1, max_tokens=8192)
     return response.content.strip()
 
 

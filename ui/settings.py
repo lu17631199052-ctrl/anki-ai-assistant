@@ -264,7 +264,7 @@ class SettingsDialog(QDialog):
             self.vision_model_combo.setCurrentText(vm)
 
         self.temp_spin.setValue(self.cfg.get("temperature", 0.7))
-        self.max_tokens_spin.setValue(self.cfg.get("max_tokens", 4096))
+        self.max_tokens_spin.setValue(self.cfg.get("max_tokens", 8192))
 
         default_deck = self.cfg.get("default_deck", "")
         idx = self.default_deck_combo.findData(default_deck)

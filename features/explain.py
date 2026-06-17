@@ -103,7 +103,7 @@ def explain_current_card(main_window=None) -> None:
                 messages,
                 model=model,
                 temperature=cfg.get("temperature", 0.7),
-                max_tokens=cfg.get("max_tokens", 4096),
+                max_tokens=cfg.get("max_tokens", 8192),
             ):
                 emitter.chunk_ready.emit(chunk)
             emitter.stream_done.emit()
@@ -115,7 +115,7 @@ def explain_current_card(main_window=None) -> None:
                     messages,
                     model=model,
                     temperature=cfg.get("temperature", 0.7),
-                    max_tokens=cfg.get("max_tokens", 4096),
+                    max_tokens=cfg.get("max_tokens", 8192),
                 )
                 if response.content:
                     _log.info(f"[explain] 非流式回退成功: {len(response.content)} 字符")

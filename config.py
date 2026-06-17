@@ -67,7 +67,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "model": "deepseek-v4-flash",
     "base_url": "https://api.deepseek.com/v1",
     "temperature": 0.7,
-    "max_tokens": 4096,
+    "max_tokens": 8192,
     "default_deck": "",
     "default_note_type": "",
     "last_deck_id": None,
