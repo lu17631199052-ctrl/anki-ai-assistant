@@ -46,6 +46,11 @@ def _open_settings() -> None:
     dialog.show()
 
 
+def _show_log() -> None:
+    from .ui.settings import _show_log_dialog
+    _show_log_dialog(mw)
+
+
 def _explain_current_card() -> None:
     from .features.explain import explain_current_card
     explain_current_card(mw)
@@ -71,6 +76,10 @@ def _setup_menu() -> None:
     menu.addAction(wrong_answer_action)
 
     menu.addSeparator()
+
+    log_action: QAction = QAction("📋 查看日志", mw)
+    qconnect(log_action.triggered, _show_log)
+    menu.addAction(log_action)
 
     settings_action: QAction = QAction("设置...", mw)
     qconnect(settings_action.triggered, _open_settings)
