@@ -1,6 +1,9 @@
 """Centralized logging for the AI Assistant addon.
 
-Logs to {addon_dir}/plugin.log with rotation (500KB × 3 files).
+Logs to {log_dir}/plugin.log (one level above the addon itself) with
+rotation (500KB × 3 files).  Writing outside the addon directory
+prevents file-lock errors when Anki upgrades/replaces the addon.
+
 Never logs full API keys or message content — only summaries.
 """
 
@@ -34,10 +37,16 @@ def get_log_file() -> str:
 
 
 def setup_logging(addon_dir: str) -> None:
-    """Initialize file logging. Call once at plugin startup."""
+    """Initialize file logging. Call once at plugin startup.
+
+    Log file is written to the *parent* of addon_dir (i.e. addons21/)
+    so that Anki's addon upgrade/delete process does not hit a
+    file-lock conflict on the log.
+    """
     global _logger, _log_file
 
-    _log_file = os.path.join(addon_dir, "plugin.log")
+    # Write outside the addon dir — prevents PermissionError on upgrade
+    _log_file = os.path.join(os.path.dirname(addon_dir), "plugin.log")
 
     _logger = logging.getLogger("anki_ai")
     _logger.setLevel(logging.DEBUG)
