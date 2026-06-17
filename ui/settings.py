@@ -233,95 +233,6 @@ class SettingsDialog(QDialog):
     def _show_log(self) -> None:
         _show_log_dialog(self)
 
-
-def _show_log_dialog(parent=None) -> None:
-    """Standalone function: open a dialog showing the plugin log file content.
-    Can be called from both the settings dialog and the main menu.
-    """
-    log_path = get_log_file()
-    dialog = QDialog(parent)
-    dialog.setWindowTitle("插件日志")
-    dialog.setMinimumSize(680, 500)
-    layout = QVBoxLayout(dialog)
-
-    # Info bar: log path + copy button
-    info_layout = QHBoxLayout()
-    info_label = QLabel(f"日志文件: {log_path}")
-    info_label.setStyleSheet("color: #666; font-size: 12px;")
-    info_layout.addWidget(info_label)
-    info_layout.addStretch()
-
-    # Read raw log content first (for clipboard)
-    raw_content = ""
-    try:
-        if os.path.exists(log_path):
-            fsize = os.path.getsize(log_path)
-            read_size = min(fsize, 100 * 1024)
-            with open(log_path, "r", encoding="utf-8") as f:
-                if fsize > read_size:
-                    f.seek(fsize - read_size)
-                    f.readline()
-                raw_content = f.read()
-    except Exception:
-        raw_content = ""
-
-    copy_btn = QPushButton("复制日志内容")
-    copy_btn.setObjectName("warn")
-    copy_btn.setMinimumHeight(28)
-    copy_btn.clicked.connect(lambda: (
-        QApplication.clipboard().setText(raw_content),
-        tooltip("日志已复制，可直接粘贴发送")
-    ))
-    info_layout.addWidget(copy_btn)
-    layout.addLayout(info_layout)
-
-    # Log content browser
-    browser = QTextBrowser()
-    browser.setOpenExternalLinks(True)
-    browser.setStyleSheet("""
-        QTextBrowser {
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 12px;
-            background: #1E1E1E;
-            color: #D4D4D4;
-            border: 1px solid #444;
-            border-radius: 4px;
-            padding: 8px;
-        }
-    """)
-
-    if raw_content:
-        # Escape HTML entities for safe display
-        content = raw_content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        # Highlight error/warning lines
-        content = content.replace(
-            "[ERROR]", '<span style="color:#F44747;">[ERROR]</span>'
-        ).replace(
-            "[WARNING]", '<span style="color:#CCA700;">[WARNING]</span>'
-        )
-        if fsize > read_size:
-            header = f'<pre style="color:#888;">... 文件共 {fsize / 1024:.0f} KB，仅显示最近 {read_size / 1024:.0f} KB</pre>'
-            browser.setHtml(f"{header}<pre>{content}</pre>")
-        else:
-            browser.setHtml(f"<pre>{content}</pre>")
-    else:
-        browser.setHtml("<p style='color:#888;'>日志文件尚未创建。使用一次插件功能后会自动生成。</p>")
-
-    layout.addWidget(browser)
-
-    # Close button
-    close_btn = QPushButton("关闭")
-    close_btn.setObjectName("primary")
-    close_btn.clicked.connect(dialog.accept)
-    close_btn.setMinimumHeight(36)
-    close_btn.setMinimumWidth(100)
-    btn_row = QHBoxLayout()
-    btn_row.addStretch()
-    btn_row.addWidget(close_btn)
-    layout.addLayout(btn_row)
-
-    dialog.show()
-
     def _load_config(self) -> None:
         idx = self.provider_combo.findData(self.cfg.get("provider", "deepseek"))
         if idx >= 0:
@@ -479,3 +390,93 @@ def _show_log_dialog(parent=None) -> None:
         finally:
             self.test_btn.setEnabled(True)
             self.test_btn.setText("测试连接")
+
+
+def _show_log_dialog(parent=None) -> None:
+    """Standalone function: open a dialog showing the plugin log file content.
+    Can be called from both the settings dialog and the main menu.
+    """
+    log_path = get_log_file()
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("插件日志")
+    dialog.setMinimumSize(680, 500)
+    layout = QVBoxLayout(dialog)
+
+    # Info bar: log path + copy button
+    info_layout = QHBoxLayout()
+    info_label = QLabel(f"日志文件: {log_path}")
+    info_label.setStyleSheet("color: #666; font-size: 12px;")
+    info_layout.addWidget(info_label)
+    info_layout.addStretch()
+
+    # Read raw log content first (for clipboard)
+    raw_content = ""
+    try:
+        if os.path.exists(log_path):
+            fsize = os.path.getsize(log_path)
+            read_size = min(fsize, 100 * 1024)
+            with open(log_path, "r", encoding="utf-8") as f:
+                if fsize > read_size:
+                    f.seek(fsize - read_size)
+                    f.readline()
+                raw_content = f.read()
+    except Exception:
+        raw_content = ""
+
+    copy_btn = QPushButton("复制日志内容")
+    copy_btn.setObjectName("warn")
+    copy_btn.setMinimumHeight(28)
+    copy_btn.clicked.connect(lambda: (
+        QApplication.clipboard().setText(raw_content),
+        tooltip("日志已复制，可直接粘贴发送")
+    ))
+    info_layout.addWidget(copy_btn)
+    layout.addLayout(info_layout)
+
+    # Log content browser
+    browser = QTextBrowser()
+    browser.setOpenExternalLinks(True)
+    browser.setStyleSheet("""
+        QTextBrowser {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            background: #1E1E1E;
+            color: #D4D4D4;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 8px;
+        }
+    """)
+
+    if raw_content:
+        # Escape HTML entities for safe display
+        content = raw_content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        # Highlight error/warning lines
+        content = content.replace(
+            "[ERROR]", '<span style="color:#F44747;">[ERROR]</span>'
+        ).replace(
+            "[WARNING]", '<span style="color:#CCA700;">[WARNING]</span>'
+        )
+        if fsize > read_size:
+            header = f'<pre style="color:#888;">... 文件共 {fsize / 1024:.0f} KB，仅显示最近 {read_size / 1024:.0f} KB</pre>'
+            browser.setHtml(f"{header}<pre>{content}</pre>")
+        else:
+            browser.setHtml(f"<pre>{content}</pre>")
+    else:
+        browser.setHtml("<p style='color:#888;'>日志文件尚未创建。使用一次插件功能后会自动生成。</p>")
+
+    layout.addWidget(browser)
+
+    # Close button
+    close_btn = QPushButton("关闭")
+    close_btn.setObjectName("primary")
+    close_btn.clicked.connect(dialog.accept)
+    close_btn.setMinimumHeight(36)
+    close_btn.setMinimumWidth(100)
+    btn_row = QHBoxLayout()
+    btn_row.addStretch()
+    btn_row.addWidget(close_btn)
+    layout.addLayout(btn_row)
+
+    dialog.show()
+
