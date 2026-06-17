@@ -180,6 +180,7 @@ def _stream_via_curl(
     got_content = False
     got_done = False
     chunk_count = 0
+    finish_reason: Optional[str] = None
     try:
         proc.stdin.write(data.encode("utf-8"))
         proc.stdin.close()
@@ -198,7 +199,11 @@ def _stream_via_curl(
                     msg = obj["error"].get("message", data_str)
                     _log.error(f"[curl-stream] API 错误: {msg}")
                     raise RuntimeError(f"API 错误: {msg}")
-                delta = obj["choices"][0].get("delta", {})
+                choice = obj["choices"][0]
+                delta = choice.get("delta", {})
+                fr = choice.get("finish_reason", "") or delta.get("finish_reason", "")
+                if fr:
+                    finish_reason = fr
                 content = delta.get("content", "")
                 if content:
                     got_content = True
@@ -224,12 +229,17 @@ def _stream_via_curl(
             pass
 
     if got_done:
-        _log.info(f"[curl-stream] 完成: {chunk_count} chunks")
+        fr_str = f" finish_reason={finish_reason}" if finish_reason else ""
+        _log.info(f"[curl-stream] 完成: {chunk_count} chunks{fr_str}")
+        if finish_reason:
+            yield f"__FINISH_REASON__:{finish_reason}"
     elif got_content:
         _log.error(f"[curl-stream] 中断: 收到 {chunk_count} chunks 但未收到 [DONE]")
         raise RuntimeError("流式响应中断：连接在接收完整回复前断开，请重试")
     else:
         _log.warning("[curl-stream] 结束: 未收到任何内容（模型可能拒绝回答）")
+        if finish_reason:
+            yield f"__FINISH_REASON__:{finish_reason}"
 
 
 def _stream_via_urllib(
@@ -255,6 +265,7 @@ def _stream_via_urllib(
     got_content = False
     got_done = False
     chunk_count = 0
+    finish_reason: Optional[str] = None
     try:
         _log.info(f"[urllib-stream] 开始: {request_summary(payload)} timeout={timeout}s")
         resp = urlopen(req, timeout=timeout, context=ctx)
@@ -272,7 +283,11 @@ def _stream_via_urllib(
                     msg = obj["error"].get("message", data_str)
                     _log.error(f"[urllib-stream] API 错误: {msg}")
                     raise RuntimeError(f"API 错误: {msg}")
-                delta = obj["choices"][0].get("delta", {})
+                choice = obj["choices"][0]
+                delta = choice.get("delta", {})
+                fr = choice.get("finish_reason", "") or delta.get("finish_reason", "")
+                if fr:
+                    finish_reason = fr
                 content = delta.get("content", "")
                 if content:
                     got_content = True
@@ -293,12 +308,17 @@ def _stream_via_urllib(
         raise RuntimeError(f"API 错误 ({e.code}): {msg}")
 
     if got_done:
-        _log.info(f"[urllib-stream] 完成: {chunk_count} chunks")
+        fr_str = f" finish_reason={finish_reason}" if finish_reason else ""
+        _log.info(f"[urllib-stream] 完成: {chunk_count} chunks{fr_str}")
+        if finish_reason:
+            yield f"__FINISH_REASON__:{finish_reason}"
     elif got_content:
         _log.error(f"[urllib-stream] 中断: 收到 {chunk_count} chunks 但未收到 [DONE]")
         raise RuntimeError("流式响应中断：连接在接收完整回复前断开，请重试")
     else:
         _log.warning("[urllib-stream] 结束: 未收到任何内容（模型可能拒绝回答）")
+        if finish_reason:
+            yield f"__FINISH_REASON__:{finish_reason}"
 
 
 def _do_request(

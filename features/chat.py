@@ -95,13 +95,14 @@ class ChatSession:
     def send_stream(self, user_message: str):
         """Send a message and yield response chunks. Streaming version.
 
-        If streaming fails, automatically falls back to non-streaming
-        request to ensure the user gets a complete response.
+        If streaming fails, falls back to non-streaming.
+        If response hits the token limit (finish_reason=length), auto-continues.
         """
         cfg = get_config()
         base_url = get_active_base_url()
         api_key = get_active_api_key()
         model = get_active_model()
+        max_tokens = cfg.get("max_tokens", 4096)
 
         if not api_key and cfg.get("provider") != "ollama":
             raise RuntimeError("请先在设置中配置 API Key")
@@ -110,17 +111,20 @@ class ChatSession:
         self.messages.append(LLMMessage(role="user", content=user_message))
 
         full_response = ""
+        finish_reason = ""
         stream_failed = False
         try:
             for chunk in client.chat_stream(
                 self.messages,
                 model=model,
                 temperature=cfg.get("temperature", 0.7),
-                max_tokens=cfg.get("max_tokens", 4096),
+                max_tokens=max_tokens,
             ):
-                if chunk:
-                    full_response += chunk
-                    yield chunk
+                if chunk.startswith("__FINISH_REASON__:"):
+                    finish_reason = chunk.split(":", 1)[1]
+                    continue
+                full_response += chunk
+                yield chunk
         except Exception as e:
             stream_failed = True
             _log.warning(f"[chat] 流式失败，准备回退到非流式: {e}")
@@ -132,11 +136,10 @@ class ChatSession:
                     self.messages,
                     model=model,
                     temperature=cfg.get("temperature", 0.7),
-                    max_tokens=cfg.get("max_tokens", 4096),
+                    max_tokens=max_tokens,
                 )
                 full_response = response.content
                 _log.info(f"[chat] 非流式回退成功: {len(full_response)} 字符")
-                # Signal to the UI that this is a replacement (full response)
                 yield "\n\n---\n\n⚠️ 流式响应中断，已自动重新获取完整回复：\n\n" + full_response
             except Exception as e2:
                 _log.error(f"[chat] 非流式回退也失败: {e2}")
@@ -146,3 +149,26 @@ class ChatSession:
 
         if len(self.messages) > 21:
             self.messages = [self.messages[0]] + self.messages[-20:]
+
+        # Auto-continue if model hit token limit
+        if finish_reason == "length" and not stream_failed:
+            _log.info(f"[chat] 触发自动续写 (finish_reason=length)")
+            yield "\n\n---\n\n📝 回复较长，自动续写中...\n\n"
+            try:
+                self.messages.append(LLMMessage(role="user", content="继续完成上面的回答，直接从截断处接着写，不要重复前面的内容。"))
+                for chunk in client.chat_stream(
+                    self.messages,
+                    model=model,
+                    temperature=cfg.get("temperature", 0.7),
+                    max_tokens=max_tokens * 2,
+                ):
+                    if chunk.startswith("__FINISH_REASON__:"):
+                        continue
+                    full_response += chunk
+                    yield chunk
+                # Merge: pop the "继续" user msg, update assistant with full content
+                self.messages.pop()  # "继续" user message
+                self.messages[-1] = LLMMessage(role="assistant", content=full_response)
+            except Exception as e:
+                _log.error(f"[chat] 自动续写失败: {e}")
+                yield f"\n\n❌ 自动续写失败: {e}"
