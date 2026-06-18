@@ -18,6 +18,7 @@ from aqt.qt import (
     QCheckBox,
     QWidget,
     QTextBrowser,
+    QTextEdit,
     QFrame,
     QScrollArea,
     QTabWidget,
@@ -228,7 +229,7 @@ class SettingsDialog(QDialog):
 
         prompt_group = QGroupBox("AI 对话快捷提示词（显示在输入框下方的 1-4 号按钮）")
         prompt_layout = QFormLayout()
-        self.prompt_edits: list[QLineEdit] = []
+        self.prompt_edits: list[QTextEdit] = []
         default_prompts = [
             "请用中文解释这张卡片的核心概念",
             "请帮我总结这张卡片的关键要点",
@@ -236,10 +237,16 @@ class SettingsDialog(QDialog):
             "请用一个通俗易懂的比喻帮助我理解这个知识点",
         ]
         for i in range(4):
-            edit = QLineEdit()
+            edit = QTextEdit()
             edit.setPlaceholderText(f"提示词 {i+1}（留空则不显示按钮）")
-            edit.setText(default_prompts[i] if i < len(default_prompts) else "")
-            edit.setClearButtonEnabled(True)
+            edit.setPlainText(default_prompts[i] if i < len(default_prompts) else "")
+            edit.setMinimumHeight(60)
+            edit.setMaximumHeight(100)
+            edit.setStyleSheet(
+                "QTextEdit { border: 1px solid #D0D5DD; border-radius: 6px; "
+                "padding: 6px 8px; font-size: 13px; background: #FFF; } "
+                "QTextEdit:focus { border-color: #4A90D9; }"
+            )
             prompt_layout.addRow(f"提示词 {i+1}:", edit)
             self.prompt_edits.append(edit)
         prompt_group.setLayout(prompt_layout)
@@ -333,7 +340,7 @@ class SettingsDialog(QDialog):
         prompts = self.cfg.get("chat_prompts", [])
         for i, edit in enumerate(self.prompt_edits):
             if i < len(prompts):
-                edit.setText(prompts[i])
+                edit.setPlainText(prompts[i])
             else:
                 edit.clear()
 
@@ -371,7 +378,7 @@ class SettingsDialog(QDialog):
         self.cfg["default_deck"] = self.default_deck_combo.currentData()
         self.cfg["default_note_type"] = self.default_note_type_combo.currentData()
         self.cfg["md_to_html"] = self.md_to_html_check.isChecked()
-        self.cfg["chat_prompts"] = [e.text().strip() for e in self.prompt_edits]
+        self.cfg["chat_prompts"] = [e.toPlainText().strip() for e in self.prompt_edits]
         self.cfg["vision_provider"] = self.vision_provider_combo.currentData()
         self.cfg["vision_api_key"] = self.vision_api_key_edit.text().strip()
         self.cfg["vision_model"] = self.vision_model_combo.currentText().strip()
