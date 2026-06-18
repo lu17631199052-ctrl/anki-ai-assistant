@@ -26,6 +26,8 @@ from aqt.qt import (
     QTimer,
     Qt,
     QSize,
+    QIcon,
+    QEvent,
 )
 from aqt import mw
 from aqt.utils import tooltip
@@ -33,6 +35,7 @@ from aqt.utils import tooltip
 # ── data file path (same directory as config backup) ────────────────
 _ADDON_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DATA_PATH = os.path.join(os.path.dirname(_ADDON_DIR), "anki_ai_assistant_sidebar.json")
+_MEDIA_DIR = os.path.join(_ADDON_DIR, "media")
 
 # ── singleton references ────────────────────────────────────────────
 _launcher_dock: Optional[QDockWidget] = None
@@ -107,14 +110,15 @@ class TodoItemWidget(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# LauncherWidget — fixed left icon strip with logo
+# LauncherWidget — fixed left icon strip with SVG icons
 # ═══════════════════════════════════════════════════════════════════════
 
 class LauncherWidget(QWidget):
     """Fixed-width icon bar docked on the left, always visible.
 
     Layout (top to bottom):
-      - Logo area (🧠 brain icon in a circle)
+      - Logo (brain SVG icon)
+      - Separator
       - Tool icons with labels
       - Separator
       - Settings gear
@@ -126,6 +130,38 @@ class LauncherWidget(QWidget):
         self.setFixedWidth(_LAUNCHER_WIDTH)
         self._buttons: dict[str, QPushButton] = {}
         self._build_ui()
+        self.installEventFilter(self)
+
+    # ── icon helpers ───────────────────────────────────────────────
+
+    @staticmethod
+    def _load_icon(name: str) -> QIcon:
+        """Load an SVG icon, returns empty QIcon if file missing."""
+        path = os.path.join(_MEDIA_DIR, f"{name}.svg")
+        if os.path.exists(path):
+            icon = QIcon(path)
+            if not icon.isNull():
+                return icon
+        return QIcon()
+
+    @staticmethod
+    def _load_icon_pair(name: str) -> tuple[QIcon, QIcon]:
+        """Return (normal_gray_icon, white_icon) for a tool."""
+        normal = LauncherWidget._load_icon(name)
+        white = LauncherWidget._load_icon(f"{name}_white")
+        if white.isNull():
+            white = normal
+        return normal, white
+
+    def _set_btn_icons(self, btn: QPushButton, name: str) -> None:
+        """Load and store both icon variants on a button via properties."""
+        normal, white = self._load_icon_pair(name)
+        btn.setProperty("normalIcon", normal)
+        btn.setProperty("whiteIcon", white)
+        btn.setIcon(normal)
+        btn.setIconSize(QSize(24, 24))
+
+    # ── UI construction ────────────────────────────────────────────
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -133,16 +169,15 @@ class LauncherWidget(QWidget):
         layout.setSpacing(2)
 
         # ── Logo ──────────────────────────────────────────────────
-        logo = QPushButton("🧠")
+        logo = QPushButton()
         logo.setFixedSize(_ICON_SIZE + 4, _ICON_SIZE + 4)
         logo.setToolTip("AI Study Assistant")
         logo.setFlat(True)
-        logo.setStyleSheet(
-            "QPushButton { font-size: 24px; border: none; border-radius: 22px; "
-            "background: transparent; } "
-            "QPushButton:hover { background: rgba(74,144,217,0.12); }"
-        )
+        logo.setCursor(Qt.CursorShape.PointingHandCursor)
         logo.clicked.connect(lambda: toggle_notebook("notepad"))
+        self._set_btn_icons(logo, "logo")
+        logo.setIconSize(QSize(28, 28))
+        logo.installEventFilter(self)
         logo_layout = QHBoxLayout()
         logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(logo)
@@ -159,25 +194,19 @@ class LauncherWidget(QWidget):
         layout.addStretch(1)
 
         # ── Tool icons ────────────────────────────────────────────
-        # Each item: (key, emoji, label, tooltip)
         tool_icons = [
-            ("notebook", "📝", "记事本", "记事本 — 随时记录想法"),
-            ("todo",     "✅", "待办",   "待办清单"),
-            ("chat",     "💬", "AI对话", "AI 学习助手对话"),
+            ("notebook", "notebook", "记事本", "记事本 — 随时记录想法"),
+            ("todo",     "todo",     "待办",   "待办清单"),
+            ("chat",     "chat",     "AI对话", "AI 学习助手对话"),
         ]
 
-        for key, emoji, label, tooltip_text in tool_icons:
-            item_widget = self._create_icon_with_label(emoji, label, tooltip_text)
-            item_widget.setCursor(Qt.CursorShape.PointingHandCursor)
-            # Make the whole item clickable
+        for key, icon_name, label, tooltip_text in tool_icons:
+            item_widget = self._create_icon_with_label(icon_name, label, tooltip_text)
             btn = item_widget.findChild(QPushButton)
             if btn:
                 btn.clicked.connect(self._make_handler(key))
+                btn.installEventFilter(self)
                 self._buttons[key] = btn
-            # Also click on label area
-            lbl = item_widget.findChild(QLabel)
-            if lbl:
-                lbl.mousePressEvent = lambda e, k=key: self._make_handler(k)()
             layout.addWidget(item_widget)
             layout.addSpacing(2)
 
@@ -191,16 +220,16 @@ class LauncherWidget(QWidget):
         layout.addSpacing(4)
 
         # ── Settings gear ─────────────────────────────────────────
-        settings_item = self._create_icon_with_label("⚙", "设置", "插件设置")
-        settings_item.setCursor(Qt.CursorShape.PointingHandCursor)
+        settings_item = self._create_icon_with_label("settings", "设置", "插件设置")
         sbtn = settings_item.findChild(QPushButton)
         if sbtn:
             sbtn.clicked.connect(self._open_settings)
+            sbtn.installEventFilter(self)
             self._buttons["settings"] = sbtn
         layout.addWidget(settings_item)
 
-    def _create_icon_with_label(self, emoji: str, label: str, tooltip: str) -> QWidget:
-        """Create a vertical icon + label combo."""
+    def _create_icon_with_label(self, icon_name: str, label: str, tooltip: str) -> QWidget:
+        """Create a vertical SVG icon + label combo."""
         container = QWidget()
         container.setFixedSize(_LAUNCHER_WIDTH, 56)
         vbox = QVBoxLayout(container)
@@ -208,13 +237,14 @@ class LauncherWidget(QWidget):
         vbox.setSpacing(1)
         vbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        btn = QPushButton(emoji)
+        btn = QPushButton()
         btn.setFixedSize(_ICON_SIZE, _ICON_SIZE)
         btn.setToolTip(tooltip)
         btn.setFlat(True)
         btn.setCheckable(True)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setObjectName(f"launcher_btn_{label}")
+        self._set_btn_icons(btn, icon_name)
 
         lbl = QLabel(label)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -224,6 +254,25 @@ class LauncherWidget(QWidget):
         vbox.addWidget(btn, 0, Qt.AlignmentFlag.AlignCenter)
         vbox.addWidget(lbl, 0, Qt.AlignmentFlag.AlignCenter)
         return container
+
+    # ── event filter: hover icon swap ──────────────────────────────
+
+    def eventFilter(self, watched, event) -> bool:
+        """Swap normal ↔ white icon on hover, and handle checked state."""
+        if isinstance(watched, QPushButton) and watched.property("normalIcon") is not None:
+            normal = watched.property("normalIcon")
+            white = watched.property("whiteIcon")
+            if isinstance(normal, QIcon) and isinstance(white, QIcon):
+                if event.type() == QEvent.Type.Enter:
+                    watched.setIcon(white)
+                elif event.type() == QEvent.Type.Leave:
+                    if watched.isChecked():
+                        watched.setIcon(white)
+                    else:
+                        watched.setIcon(normal)
+        return super().eventFilter(watched, event)
+
+    # ── handlers ───────────────────────────────────────────────────
 
     def _make_handler(self, key: str) -> Callable:
         def handler():
@@ -241,16 +290,25 @@ class LauncherWidget(QWidget):
         dialog.show()
 
     def set_active(self, key: str, active: bool) -> None:
-        """Set the checked state of an icon button."""
+        """Set the checked state of an icon button and swap icon."""
         btn = self._buttons.get(key)
         if btn and btn.isCheckable():
             btn.setChecked(active)
-        # Also update label color for active state
+            # Swap icon to white when active
+            normal = btn.property("normalIcon")
+            white = btn.property("whiteIcon")
+            if active and isinstance(white, QIcon):
+                btn.setIcon(white)
+            elif not active and isinstance(normal, QIcon):
+                btn.setIcon(normal)
+        # Update label color for active state
         if btn and btn.parent():
             lbl = btn.parent().findChild(QLabel)
             if lbl:
                 if active:
-                    lbl.setStyleSheet("font-size: 9px; color: #4A90D9; background: transparent; font-weight: bold;")
+                    lbl.setStyleSheet(
+                        "font-size: 9px; color: #4A90D9; background: transparent; font-weight: bold;"
+                    )
                 else:
                     lbl.setStyleSheet("font-size: 9px; color: #888; background: transparent;")
 
@@ -259,14 +317,14 @@ class LauncherWidget(QWidget):
         night = mw.pm.night_mode() if mw and hasattr(mw, 'pm') else False
         if night:
             bg = "#1E1E1E"
-            hover = "#333"
-            active = "#3A5070"
+            hover_bg = "#333"
+            active_bg = "#3A5070"
             sep_color = "#444"
             label_color = "#AAA"
         else:
             bg = "#F0F2F5"
-            hover = "#DCE8F5"
-            active = "#CCDBF0"
+            hover_bg = "#DCE8F5"
+            active_bg = "#CCDBF0"
             sep_color = "#D8DADC"
             label_color = "#777"
 
@@ -278,12 +336,12 @@ class LauncherWidget(QWidget):
         )
 
         icon_style = (
-            f"QPushButton {{ font-size: 22px; border: none; border-radius: 10px; "
-            f"background: transparent; color: #555; }} "
-            f"QPushButton:hover {{ background: {hover}; }} "
-            f"QPushButton:checked {{ background: {active}; color: #4A90D9; }}"
+            f"QPushButton {{ border: none; border-radius: 10px; "
+            f"background: transparent; }} "
+            f"QPushButton:hover {{ background: {hover_bg}; }} "
+            f"QPushButton:checked {{ background: {active_bg}; }}"
         )
-        for key, btn in self._buttons.items():
+        for btn in self._buttons.values():
             if btn is not None:
                 btn.setStyleSheet(icon_style)
 
@@ -295,17 +353,16 @@ class LauncherWidget(QWidget):
         # Update label colors
         for container in self.findChildren(QWidget):
             lbl = container.findChild(QLabel)
-            if lbl and lbl.text() not in ("记事本", "待办", "AI对话", "设置"):
-                continue
-            if lbl:
-                # Check if associated button is active
+            if lbl and lbl.text() in ("记事本", "待办", "AI对话", "设置"):
                 btn = container.findChild(QPushButton)
                 if btn and btn.isChecked():
                     lbl.setStyleSheet(
-                        f"font-size: 9px; color: #4A90D9; background: transparent; font-weight: bold;"
+                        "font-size: 9px; color: #4A90D9; background: transparent; font-weight: bold;"
                     )
                 else:
-                    lbl.setStyleSheet(f"font-size: 9px; color: {label_color}; background: transparent;")
+                    lbl.setStyleSheet(
+                        f"font-size: 9px; color: {label_color}; background: transparent;"
+                    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
