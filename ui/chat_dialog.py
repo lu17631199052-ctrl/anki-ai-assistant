@@ -348,22 +348,24 @@ class ChatWidget(QWidget):
         input_layout.addLayout(btn_layout)
         layout.addLayout(input_layout)
 
-        # Quick prompt buttons
+        # Quick prompt buttons (numbered 1-4, compact)
         self._prompt_btns: list[QPushButton] = []
         prompt_row = QHBoxLayout()
-        prompt_row.setSpacing(4)
+        prompt_row.setSpacing(6)
         for i in range(4):
-            btn = QPushButton()
+            btn = QPushButton(str(i + 1))
+            btn.setFixedSize(28, 28)
+            btn.setToolTip("点击发送预设提示词（可在设置中编辑）")
             btn.setStyleSheet(
-                "QPushButton { font-size: 11px; padding: 4px 8px; "
-                "border: 1px solid #D0D5DD; border-radius: 4px; "
-                "background: #FFF; color: #666; } "
-                "QPushButton:hover { background: #EBF3FC; border-color: #4A90D9; color: #4A90D9; }"
+                "QPushButton { font-size: 13px; font-weight: bold; "
+                "border: 1.5px solid #D0D5DD; border-radius: 14px; "
+                "background: #FFF; color: #888; } "
+                "QPushButton:hover { background: #4A90D9; border-color: #4A90D9; color: #FFF; }"
             )
             btn.clicked.connect(self._make_prompt_handler(i))
-            btn.setToolTip("点击发送预设提示词（可在设置中编辑）")
             self._prompt_btns.append(btn)
-            prompt_row.addWidget(btn, 1)
+            prompt_row.addWidget(btn)
+        prompt_row.addStretch()
         layout.addLayout(prompt_row)
         self._refresh_prompt_buttons()
 
@@ -378,16 +380,12 @@ class ChatWidget(QWidget):
         return handler
 
     def _refresh_prompt_buttons(self) -> None:
-        """Update button labels from current config."""
+        """Update button tooltips from current config."""
         from ..config import get_config
         prompts = get_config().get("chat_prompts", [])
         for i, btn in enumerate(self._prompt_btns):
             if i < len(prompts) and prompts[i].strip():
-                text = prompts[i]
-                # Shorten for display
-                label = text[:12] + "…" if len(text) > 12 else text
-                btn.setText(label)
-                btn.setToolTip(text)
+                btn.setToolTip(prompts[i])
                 btn.setVisible(True)
             else:
                 btn.setVisible(False)
