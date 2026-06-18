@@ -76,6 +76,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "vision_provider": "qwen",
     "vision_api_key": "",
     "vision_model": "qwen-vl-plus",
+    # Quick chat prompts (editable in settings)
+    "chat_prompts": [
+        "请用中文解释这张卡片的核心概念",
+        "请帮我总结这张卡片的关键要点",
+        "请为这张卡片的内容生成3道选择题",
+        "请用一个通俗易懂的比喻帮助我理解这个知识点",
+    ],
 }
 
 

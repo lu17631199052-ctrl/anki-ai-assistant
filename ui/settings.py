@@ -196,6 +196,26 @@ class SettingsDialog(QDialog):
         card_group.setLayout(card_layout)
         layout.addWidget(card_group)
 
+        # Quick chat prompts
+        prompt_group = QGroupBox("AI 对话快捷提示词（最多4个，显示在输入框下方）")
+        prompt_layout = QFormLayout()
+        self.prompt_edits: list[QLineEdit] = []
+        default_prompts = [
+            "请用中文解释这张卡片的核心概念",
+            "请帮我总结这张卡片的关键要点",
+            "请为这张卡片的内容生成3道选择题",
+            "请用一个通俗易懂的比喻帮助我理解这个知识点",
+        ]
+        for i in range(4):
+            edit = QLineEdit()
+            edit.setPlaceholderText(f"提示词 {i+1}（留空则不显示按钮）")
+            edit.setText(default_prompts[i] if i < len(default_prompts) else "")
+            edit.setClearButtonEnabled(True)
+            prompt_layout.addRow(f"提示词 {i+1}:", edit)
+            self.prompt_edits.append(edit)
+        prompt_group.setLayout(prompt_layout)
+        layout.addWidget(prompt_group)
+
         # Buttons
         btn_layout = QHBoxLayout()
         self.test_btn = QPushButton("🔗 测试连接")
@@ -225,8 +245,6 @@ class SettingsDialog(QDialog):
         self.cancel_btn.clicked.connect(self.reject)
         self.cancel_btn.setMinimumHeight(36)
         btn_layout.addWidget(self.cancel_btn)
-
-        layout.addLayout(btn_layout)
 
         layout.addLayout(btn_layout)
 
@@ -278,6 +296,14 @@ class SettingsDialog(QDialog):
 
         self.md_to_html_check.setChecked(self.cfg.get("md_to_html", False))
 
+        # Load chat prompts
+        prompts = self.cfg.get("chat_prompts", [])
+        for i, edit in enumerate(self.prompt_edits):
+            if i < len(prompts):
+                edit.setText(prompts[i])
+            else:
+                edit.clear()
+
     def _on_provider_changed(self) -> None:
         provider = self.provider_combo.currentData()
         preset = get_provider_preset(provider)
@@ -312,6 +338,7 @@ class SettingsDialog(QDialog):
         self.cfg["default_deck"] = self.default_deck_combo.currentData()
         self.cfg["default_note_type"] = self.default_note_type_combo.currentData()
         self.cfg["md_to_html"] = self.md_to_html_check.isChecked()
+        self.cfg["chat_prompts"] = [e.text().strip() for e in self.prompt_edits]
         self.cfg["vision_provider"] = self.vision_provider_combo.currentData()
         self.cfg["vision_api_key"] = self.vision_api_key_edit.text().strip()
         self.cfg["vision_model"] = self.vision_model_combo.currentText().strip()

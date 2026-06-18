@@ -348,6 +348,50 @@ class ChatWidget(QWidget):
         input_layout.addLayout(btn_layout)
         layout.addLayout(input_layout)
 
+        # Quick prompt buttons
+        self._prompt_btns: list[QPushButton] = []
+        prompt_row = QHBoxLayout()
+        prompt_row.setSpacing(4)
+        for i in range(4):
+            btn = QPushButton()
+            btn.setStyleSheet(
+                "QPushButton { font-size: 11px; padding: 4px 8px; "
+                "border: 1px solid #D0D5DD; border-radius: 4px; "
+                "background: #FFF; color: #666; } "
+                "QPushButton:hover { background: #EBF3FC; border-color: #4A90D9; color: #4A90D9; }"
+            )
+            btn.clicked.connect(self._make_prompt_handler(i))
+            btn.setToolTip("点击发送预设提示词（可在设置中编辑）")
+            self._prompt_btns.append(btn)
+            prompt_row.addWidget(btn, 1)
+        layout.addLayout(prompt_row)
+        self._refresh_prompt_buttons()
+
+    def _make_prompt_handler(self, index: int):
+        """Return a click handler that sends the preset prompt at index."""
+        def handler():
+            from ..config import get_config
+            prompts = get_config().get("chat_prompts", [])
+            if index < len(prompts) and prompts[index].strip():
+                self.input_edit.setPlainText(prompts[index])
+                self._send()
+        return handler
+
+    def _refresh_prompt_buttons(self) -> None:
+        """Update button labels from current config."""
+        from ..config import get_config
+        prompts = get_config().get("chat_prompts", [])
+        for i, btn in enumerate(self._prompt_btns):
+            if i < len(prompts) and prompts[i].strip():
+                text = prompts[i]
+                # Shorten for display
+                label = text[:12] + "…" if len(text) > 12 else text
+                btn.setText(label)
+                btn.setToolTip(text)
+                btn.setVisible(True)
+            else:
+                btn.setVisible(False)
+
     def eventFilter(self, obj, event) -> bool:
         from aqt.qt import QEvent
         if obj is self.input_edit and event.type() == QEvent.Type.KeyPress:
