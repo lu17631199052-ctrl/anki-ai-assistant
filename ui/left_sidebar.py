@@ -174,11 +174,13 @@ class LauncherWidget(QWidget):
         logo.setFixedSize(_ICON_SIZE + 4, _ICON_SIZE + 4)
         logo.setToolTip("AI Study Assistant")
         logo.setFlat(True)
+        logo.setCheckable(True)
         logo.setCursor(Qt.CursorShape.PointingHandCursor)
         logo.clicked.connect(lambda: toggle_notebook("notepad"))
         self._set_btn_icons(logo, "logo")
         logo.setIconSize(QSize(28, 28))
         logo.installEventFilter(self)
+        self._buttons["logo"] = logo
         logo_layout = QHBoxLayout()
         logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(logo)
