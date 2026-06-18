@@ -18,6 +18,8 @@ from aqt.qt import (
     QCheckBox,
     QWidget,
     QTextBrowser,
+    QFrame,
+    QScrollArea,
     Qt,
     QApplication,
 )
@@ -109,7 +111,6 @@ class SettingsDialog(QDialog):
         """)
 
         # Scroll area wrapping all settings content
-        from aqt.qt import QScrollArea
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
