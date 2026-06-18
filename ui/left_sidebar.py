@@ -433,9 +433,9 @@ class NotebookPanel(QWidget):
         collapse_btn.setFixedSize(26, 26)
         collapse_btn.setToolTip("隐藏页面列表")
         collapse_btn.setStyleSheet(
-            "QPushButton { font-size: 12px; border: none; border-radius: 13px; "
-            "background: #E8E8E8; color: #666; } "
-            "QPushButton:hover { background: #D0D0D0; color: #333; }"
+            "QPushButton { font-size: 14px; font-weight: bold; border: none; "
+            "border-radius: 13px; background: #E0E0E0; color: #555; } "
+            "QPushButton:hover { background: #C0C0C0; color: #222; }"
         )
         collapse_btn.clicked.connect(self._collapse_nb_sidebar)
         collapse_row = QHBoxLayout()
@@ -500,9 +500,9 @@ class NotebookPanel(QWidget):
         expand_btn.setFixedSize(20, 24)
         expand_btn.setToolTip("显示页面列表")
         expand_btn.setStyleSheet(
-            "QPushButton { font-size: 10px; border: none; border-radius: 4px; "
-            "background: #E0E0E0; color: #666; } "
-            "QPushButton:hover { background: #D0D0D0; color: #333; }"
+            "QPushButton { font-size: 11px; font-weight: bold; border: none; "
+            "border-radius: 4px; background: #E0E0E0; color: #555; } "
+            "QPushButton:hover { background: #C0C0C0; color: #222; }"
         )
         expand_btn.clicked.connect(self._expand_nb_sidebar)
         cs_layout.addWidget(expand_btn)
@@ -884,9 +884,9 @@ def _ensure_notebook_dock() -> QDockWidget:
     close_btn.setFixedSize(26, 26)
     close_btn.setToolTip("关闭面板")
     close_btn.setStyleSheet(
-        "QPushButton { font-size: 14px; border: none; border-radius: 13px; "
-        "background: #E0E0E0; color: #666; } "
-        "QPushButton:hover { background: #D0D0D0; color: #333; }"
+        "QPushButton { font-size: 16px; font-weight: bold; border: none; "
+        "border-radius: 13px; background: #E0E0E0; color: #555; } "
+        "QPushButton:hover { background: #C0C0C0; color: #222; }"
     )
     close_btn.clicked.connect(lambda: _notebook_dock.hide() if _notebook_dock else None)
     tb_layout.addWidget(close_btn)

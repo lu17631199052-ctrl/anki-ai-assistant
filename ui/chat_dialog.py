@@ -638,9 +638,9 @@ def _open_chat() -> None:
         close_btn.setFixedSize(26, 26)
         close_btn.setToolTip("关闭面板")
         close_btn.setStyleSheet(
-            "QPushButton { font-size: 14px; border: none; border-radius: 13px; "
-            "background: #E0E0E0; color: #666; } "
-            "QPushButton:hover { background: #D0D0D0; color: #333; }"
+            "QPushButton { font-size: 16px; font-weight: bold; border: none; "
+            "border-radius: 13px; background: #E0E0E0; color: #555; } "
+            "QPushButton:hover { background: #C0C0C0; color: #222; }"
         )
         close_btn.clicked.connect(lambda: _dock_widget.hide() if _dock_widget else None)
         tb_layout.addWidget(close_btn)
