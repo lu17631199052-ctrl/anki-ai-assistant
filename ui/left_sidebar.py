@@ -41,8 +41,8 @@ _notebook_panel: Optional["NotebookPanel"] = None
 _launcher: Optional["LauncherWidget"] = None
 
 # ── style constants ─────────────────────────────────────────────────
-_LAUNCHER_WIDTH = 44
-_ICON_SIZE = 32
+_LAUNCHER_WIDTH = 52
+_ICON_SIZE = 40
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -107,11 +107,18 @@ class TodoItemWidget(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# LauncherWidget — fixed left icon strip
+# LauncherWidget — fixed left icon strip with logo
 # ═══════════════════════════════════════════════════════════════════════
 
 class LauncherWidget(QWidget):
-    """Fixed-width icon bar docked on the left, always visible."""
+    """Fixed-width icon bar docked on the left, always visible.
+
+    Layout (top to bottom):
+      - Logo area (🧠 brain icon in a circle)
+      - Tool icons with labels
+      - Separator
+      - Settings gear
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -122,51 +129,101 @@ class LauncherWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 10, 4, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, 8, 0, 10)
+        layout.setSpacing(2)
+
+        # ── Logo ──────────────────────────────────────────────────
+        logo = QPushButton("🧠")
+        logo.setFixedSize(_ICON_SIZE + 4, _ICON_SIZE + 4)
+        logo.setToolTip("AI Study Assistant")
+        logo.setFlat(True)
+        logo.setStyleSheet(
+            "QPushButton { font-size: 24px; border: none; border-radius: 22px; "
+            "background: transparent; } "
+            "QPushButton:hover { background: rgba(74,144,217,0.12); }"
+        )
+        logo.clicked.connect(lambda: toggle_notebook("notepad"))
+        logo_layout = QHBoxLayout()
+        logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_layout.addWidget(logo)
+        layout.addLayout(logo_layout)
+        layout.addSpacing(4)
+
+        # ── Separator after logo ──────────────────────────────────
+        self._sep1 = QFrame()
+        self._sep1.setFrameShape(QFrame.Shape.HLine)
+        self._sep1.setFixedWidth(_LAUNCHER_WIDTH - 16)
+        layout.addWidget(self._sep1, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addSpacing(6)
 
         layout.addStretch(1)
 
-        # ── icon definitions: (key, emoji, tooltip) ────────────────
-        icons = [
-            ("notebook", "📝", "记事本"),
-            ("todo",     "✅", "待办清单"),
-            ("chat",     "💬", "AI 对话"),
+        # ── Tool icons ────────────────────────────────────────────
+        # Each item: (key, emoji, label, tooltip)
+        tool_icons = [
+            ("notebook", "📝", "记事本", "记事本 — 随时记录想法"),
+            ("todo",     "✅", "待办",   "待办清单"),
+            ("chat",     "💬", "AI对话", "AI 学习助手对话"),
         ]
 
-        for key, emoji, tooltip_text in icons:
-            btn = self._create_icon_button(emoji, tooltip_text)
-            btn.clicked.connect(self._make_handler(key))
-            layout.addWidget(btn)
-            self._buttons[key] = btn
+        for key, emoji, label, tooltip_text in tool_icons:
+            item_widget = self._create_icon_with_label(emoji, label, tooltip_text)
+            item_widget.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Make the whole item clickable
+            btn = item_widget.findChild(QPushButton)
+            if btn:
+                btn.clicked.connect(self._make_handler(key))
+                self._buttons[key] = btn
+            # Also click on label area
+            lbl = item_widget.findChild(QLabel)
+            if lbl:
+                lbl.mousePressEvent = lambda e, k=key: self._make_handler(k)()
+            layout.addWidget(item_widget)
+            layout.addSpacing(2)
 
         layout.addStretch(1)
 
-        # bottom separator
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("border: none; border-top: 1px solid #DDD; margin: 4px 2px;")
-        layout.addWidget(sep)
+        # ── Bottom separator ──────────────────────────────────────
+        self._sep2 = QFrame()
+        self._sep2.setFrameShape(QFrame.Shape.HLine)
+        self._sep2.setFixedWidth(_LAUNCHER_WIDTH - 16)
+        layout.addWidget(self._sep2, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addSpacing(4)
 
-        # settings gear at bottom
-        settings_btn = self._create_icon_button("⚙", "设置")
-        settings_btn.clicked.connect(self._open_settings)
-        layout.addWidget(settings_btn)
-        self._buttons["settings"] = settings_btn
+        # ── Settings gear ─────────────────────────────────────────
+        settings_item = self._create_icon_with_label("⚙", "设置", "插件设置")
+        settings_item.setCursor(Qt.CursorShape.PointingHandCursor)
+        sbtn = settings_item.findChild(QPushButton)
+        if sbtn:
+            sbtn.clicked.connect(self._open_settings)
+            self._buttons["settings"] = sbtn
+        layout.addWidget(settings_item)
 
-    def _create_icon_button(self, emoji: str, tooltip_text: str) -> QPushButton:
+    def _create_icon_with_label(self, emoji: str, label: str, tooltip: str) -> QWidget:
+        """Create a vertical icon + label combo."""
+        container = QWidget()
+        container.setFixedSize(_LAUNCHER_WIDTH, 56)
+        vbox = QVBoxLayout(container)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(1)
+        vbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         btn = QPushButton(emoji)
         btn.setFixedSize(_ICON_SIZE, _ICON_SIZE)
-        btn.setToolTip(tooltip_text)
+        btn.setToolTip(tooltip)
         btn.setFlat(True)
         btn.setCheckable(True)
-        btn.setStyleSheet(
-            "QPushButton { font-size: 18px; border: none; border-radius: 6px; "
-            "background: transparent; } "
-            "QPushButton:hover { background: #E8F0FE; } "
-            "QPushButton:checked { background: #D3E3FD; }"
-        )
-        return btn
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setObjectName(f"launcher_btn_{label}")
+
+        lbl = QLabel(label)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet("font-size: 9px; color: #888; background: transparent;")
+        lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        vbox.addWidget(btn, 0, Qt.AlignmentFlag.AlignCenter)
+        vbox.addWidget(lbl, 0, Qt.AlignmentFlag.AlignCenter)
+        return container
 
     def _make_handler(self, key: str) -> Callable:
         def handler():
@@ -188,33 +245,67 @@ class LauncherWidget(QWidget):
         btn = self._buttons.get(key)
         if btn and btn.isCheckable():
             btn.setChecked(active)
+        # Also update label color for active state
+        if btn and btn.parent():
+            lbl = btn.parent().findChild(QLabel)
+            if lbl:
+                if active:
+                    lbl.setStyleSheet("font-size: 9px; color: #4A90D9; background: transparent; font-weight: bold;")
+                else:
+                    lbl.setStyleSheet("font-size: 9px; color: #888; background: transparent;")
 
     def apply_theme(self) -> None:
         """Re-apply stylesheet (for night mode support)."""
         night = mw.pm.night_mode() if mw and hasattr(mw, 'pm') else False
         if night:
-            bg = "#2C2C2C"
-            hover = "#3A3A3A"
-            active = "#4A4A4A"
-            sep = "#444"
+            bg = "#1E1E1E"
+            hover = "#333"
+            active = "#3A5070"
+            sep_color = "#444"
+            label_color = "#AAA"
         else:
-            bg = "#F5F6F8"
-            hover = "#E8F0FE"
-            active = "#D3E3FD"
-            sep = "#DDD"
-        self.setStyleSheet(f"QWidget#LauncherContent {{ background: {bg}; }}")
+            bg = "#F0F2F5"
+            hover = "#DCE8F5"
+            active = "#CCDBF0"
+            sep_color = "#D8DADC"
+            label_color = "#777"
+
+        self.setStyleSheet(
+            f"QWidget#LauncherContent {{ "
+            f"background: {bg}; "
+            f"border-right: 1px solid {sep_color}; "
+            f"}}"
+        )
+
+        icon_style = (
+            f"QPushButton {{ font-size: 22px; border: none; border-radius: 10px; "
+            f"background: transparent; color: #555; }} "
+            f"QPushButton:hover {{ background: {hover}; }} "
+            f"QPushButton:checked {{ background: {active}; color: #4A90D9; }}"
+        )
         for key, btn in self._buttons.items():
-            btn.setStyleSheet(
-                f"QPushButton {{ font-size: 18px; border: none; border-radius: 6px; "
-                f"background: transparent; }} "
-                f"QPushButton:hover {{ background: {hover}; }} "
-                f"QPushButton:checked {{ background: {active}; }}"
-            )
-        # Update separator colour
-        for child in self.findChildren(QFrame):
-            child.setStyleSheet(
-                f"border: none; border-top: 1px solid {sep}; margin: 4px 2px;"
-            )
+            if btn is not None:
+                btn.setStyleSheet(icon_style)
+
+        sep_style = f"border: none; border-top: 1px solid {sep_color};"
+        for sep in [self._sep1, self._sep2]:
+            if sep:
+                sep.setStyleSheet(sep_style)
+
+        # Update label colors
+        for container in self.findChildren(QWidget):
+            lbl = container.findChild(QLabel)
+            if lbl and lbl.text() not in ("记事本", "待办", "AI对话", "设置"):
+                continue
+            if lbl:
+                # Check if associated button is active
+                btn = container.findChild(QPushButton)
+                if btn and btn.isChecked():
+                    lbl.setStyleSheet(
+                        f"font-size: 9px; color: #4A90D9; background: transparent; font-weight: bold;"
+                    )
+                else:
+                    lbl.setStyleSheet(f"font-size: 9px; color: {label_color}; background: transparent;")
 
 
 # ═══════════════════════════════════════════════════════════════════════
