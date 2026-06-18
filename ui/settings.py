@@ -20,6 +20,7 @@ from aqt.qt import (
     QTextBrowser,
     QFrame,
     QScrollArea,
+    QTabWidget,
     Qt,
     QApplication,
 )
@@ -110,16 +111,21 @@ class SettingsDialog(QDialog):
             }
         """)
 
-        # Scroll area wrapping all settings content
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_widget = QWidget()
-        layout = QVBoxLayout(scroll_widget)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(12)
-        scroll.setWidget(scroll_widget)
-        main_layout.addWidget(scroll, 1)
+        # Tab widget with two tabs
+        tabs = QTabWidget()
+        tabs.setStyleSheet(
+            "QTabWidget::pane { border: 1px solid #E0E4E8; border-radius: 8px; } "
+            "QTabBar::tab { padding: 10px 24px; font-size: 14px; } "
+            "QTabBar::tab:selected { background: #FFF; border-bottom: 2px solid #4A90D9; "
+            "color: #4A90D9; font-weight: bold; }"
+        )
+        main_layout.addWidget(tabs, 1)
+
+        # ── Tab 0: Model / API settings ──────────────────────────────
+        tab_model = QWidget()
+        tab_model_layout = QVBoxLayout(tab_model)
+        tab_model_layout.setContentsMargins(16, 12, 16, 12)
+        tab_model_layout.setSpacing(12)
 
         # Provider selection
         provider_group = QGroupBox("模型提供商")
@@ -130,7 +136,7 @@ class SettingsDialog(QDialog):
         self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
         provider_layout.addRow("提供商:", self.provider_combo)
         provider_group.setLayout(provider_layout)
-        layout.addWidget(provider_group)
+        tab_model_layout.addWidget(provider_group)
 
         # API settings
         api_group = QGroupBox("API 设置")
@@ -149,7 +155,7 @@ class SettingsDialog(QDialog):
         self.model_combo.setMinimumWidth(200)
         api_layout.addRow("模型:", self.model_combo)
         api_group.setLayout(api_layout)
-        layout.addWidget(api_group)
+        tab_model_layout.addWidget(api_group)
 
         # Vision API settings (for image recognition)
         vision_group = QGroupBox("视觉模型设置（用于图片识别，可不填则使用上方主模型）")
@@ -170,7 +176,7 @@ class SettingsDialog(QDialog):
         self.vision_model_combo.setMinimumWidth(200)
         vision_layout.addRow("视觉模型:", self.vision_model_combo)
         vision_group.setLayout(vision_layout)
-        layout.addWidget(vision_group)
+        tab_model_layout.addWidget(vision_group)
 
         # Parameters
         param_group = QGroupBox("生成参数")
@@ -187,7 +193,7 @@ class SettingsDialog(QDialog):
         self.max_tokens_spin.setSingleStep(256)
         param_layout.addRow("Max Tokens:", self.max_tokens_spin)
         param_group.setLayout(param_layout)
-        layout.addWidget(param_group)
+        tab_model_layout.addWidget(param_group)
 
         # Card defaults
         card_group = QGroupBox("默认卡片设置（快速创建卡片时使用）")
@@ -209,10 +215,18 @@ class SettingsDialog(QDialog):
         card_layout.addRow(self.md_to_html_check)
 
         card_group.setLayout(card_layout)
-        layout.addWidget(card_group)
+        tab_model_layout.addWidget(card_group)
 
-        # Quick chat prompts
-        prompt_group = QGroupBox("AI 对话快捷提示词（最多4个，显示在输入框下方）")
+        tab_model_layout.addStretch()
+        tabs.addTab(tab_model, "🔧 模型设置")
+
+        # ── Tab 1: Quick prompts ─────────────────────────────────────
+        tab_prompt = QWidget()
+        tab_prompt_layout = QVBoxLayout(tab_prompt)
+        tab_prompt_layout.setContentsMargins(16, 12, 16, 12)
+        tab_prompt_layout.setSpacing(12)
+
+        prompt_group = QGroupBox("AI 对话快捷提示词（显示在输入框下方的 1-4 号按钮）")
         prompt_layout = QFormLayout()
         self.prompt_edits: list[QLineEdit] = []
         default_prompts = [
@@ -229,7 +243,9 @@ class SettingsDialog(QDialog):
             prompt_layout.addRow(f"提示词 {i+1}:", edit)
             self.prompt_edits.append(edit)
         prompt_group.setLayout(prompt_layout)
-        layout.addWidget(prompt_group)
+        tab_prompt_layout.addWidget(prompt_group)
+        tab_prompt_layout.addStretch()
+        tabs.addTab(tab_prompt, "💬 快捷提示词")
 
         # Buttons pinned at bottom (outside scroll area)
         btn_layout2 = QHBoxLayout()
