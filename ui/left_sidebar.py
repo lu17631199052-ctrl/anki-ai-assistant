@@ -100,7 +100,7 @@ class TodoItemWidget(QWidget):
             self.label.setStyleSheet("font-size: 12px;")
 
     def _on_toggle(self, state: int) -> None:
-        done = state == Qt.CheckState.Checked.value
+        done = self.checkbox.isChecked()
         self._update_label_style(done)
         if self._on_changed:
             self._on_changed(self._index, False)
