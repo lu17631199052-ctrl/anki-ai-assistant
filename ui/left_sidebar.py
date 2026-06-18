@@ -195,9 +195,10 @@ class LauncherWidget(QWidget):
 
         # ── Tool icons ────────────────────────────────────────────
         tool_icons = [
-            ("notebook", "notebook", "记事本", "记事本 — 随时记录想法"),
-            ("todo",     "todo",     "待办",   "待办清单"),
-            ("chat",     "chat",     "AI对话", "AI 学习助手对话"),
+            ("notebook",    "notebook",    "记事本", "记事本 — 随时记录想法"),
+            ("todo",        "todo",        "待办",   "待办清单"),
+            ("wrong_answer","wrong_answer","错题",   "AI 错题整理 — 截图识别"),
+            ("chat",        "chat",        "AI对话", "AI 学习助手对话"),
         ]
 
         for key, icon_name, label, tooltip_text in tool_icons:
@@ -206,6 +207,9 @@ class LauncherWidget(QWidget):
             if btn:
                 btn.clicked.connect(self._make_handler(key))
                 btn.installEventFilter(self)
+                # wrong_answer is a one-shot action, not a toggle
+                if key == "wrong_answer":
+                    btn.setCheckable(False)
                 self._buttons[key] = btn
             layout.addWidget(item_widget)
             layout.addSpacing(2)
@@ -280,6 +284,8 @@ class LauncherWidget(QWidget):
                 toggle_notebook(tab="notepad")
             elif key == "todo":
                 toggle_notebook(tab="todo")
+            elif key == "wrong_answer":
+                _toggle_wrong_answer()
             elif key == "chat":
                 _toggle_chat()
         return handler
@@ -366,15 +372,19 @@ class LauncherWidget(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# NotebookPanel — the content panel (notepad + todo tabs)
+# NotebookPanel — multi-page notepad + todo tabs (Apple Notes style)
 # ═══════════════════════════════════════════════════════════════════════
 
 class NotebookPanel(QWidget):
-    """Right-side panel with Notepad and Todo tabs."""
+    """Right-side panel with multi-page Notepad and Todo tabs."""
+
+    # Default page template when creating a new page
+    _DEFAULT_PAGE = {"title": "", "content": "", "created_at": "", "updated_at": ""}
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._data: dict = {"notepad": "", "todos": []}
+        self._data: dict = {"pages": [], "todos": []}
+        self._current_page_index: int = -1
         self._load_data()
 
         self._save_timer = QTimer(self)
@@ -391,7 +401,7 @@ class NotebookPanel(QWidget):
         self._tabs = QTabWidget()
         self._tabs.setStyleSheet(
             "QTabWidget::pane { border: 1px solid #E0E0E0; border-radius: 0; } "
-            "QTabBar::tab { padding: 6px 14px; font-size: 12px; } "
+            "QTabBar::tab { padding: 8px 16px; font-size: 12px; } "
             "QTabBar::tab:selected { background: #FFF; border-bottom: 2px solid #4A90D9; }"
         )
         self._tabs.addTab(self._build_notepad_tab(), "📝 记事本")
@@ -399,25 +409,192 @@ class NotebookPanel(QWidget):
         self._tabs.currentChanged.connect(self._on_tab_changed)
         layout.addWidget(self._tabs, 1)
 
+    # ── Notepad tab (multi-page, Apple Notes style) ─────────────────
+
     def _build_notepad_tab(self) -> QWidget:
         tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
+        hbox = QHBoxLayout(tab)
+        hbox.setContentsMargins(0, 0, 0, 0)
+        hbox.setSpacing(0)
 
-        self._notepad = QTextEdit()
-        self._notepad.setPlaceholderText("随时记录想法...")
-        self._notepad.setStyleSheet(
-            "QTextEdit { border: none; font-size: 13px; background: #FAFAFA; "
-            "border-radius: 4px; padding: 8px; }"
+        # ── Left: page list sidebar ──────────────────────────────
+        sidebar = QWidget()
+        sidebar.setFixedWidth(150)
+        sidebar.setStyleSheet("background: #F7F7F5; border-right: 1px solid #E8E8E8;")
+        sv = QVBoxLayout(sidebar)
+        sv.setContentsMargins(8, 8, 8, 8)
+        sv.setSpacing(4)
+
+        # New page button
+        new_btn = QPushButton("+ 新建页面")
+        new_btn.setStyleSheet(
+            "QPushButton { font-size: 12px; padding: 6px 10px; border: none; "
+            "border-radius: 6px; background: transparent; color: #666; text-align: left; } "
+            "QPushButton:hover { background: #EBEBE9; }"
         )
-        self._notepad.textChanged.connect(self._schedule_save)
-        layout.addWidget(self._notepad)
+        new_btn.clicked.connect(self._new_page)
+        sv.addWidget(new_btn)
 
-        if self._data.get("notepad"):
-            self._notepad.setPlainText(self._data["notepad"])
+        # Page list
+        self._page_list = QListWidget()
+        self._page_list.setStyleSheet(
+            "QListWidget { border: none; background: transparent; font-size: 13px; } "
+            "QListWidget::item { padding: 8px 10px; border-radius: 6px; color: #37352F; } "
+            "QListWidget::item:hover { background: #EBEBE9; } "
+            "QListWidget::item:selected { background: #E2E2E0; font-weight: bold; }"
+        )
+        self._page_list.currentRowChanged.connect(self._on_page_selected)
+        sv.addWidget(self._page_list, 1)
 
+        # Delete page button
+        del_btn = QPushButton("🗑 删除页面")
+        del_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 5px 10px; border: none; "
+            "border-radius: 6px; background: transparent; color: #999; text-align: left; } "
+            "QPushButton:hover { background: #FEE; color: #E55; }"
+        )
+        del_btn.clicked.connect(self._delete_page)
+        sv.addWidget(del_btn)
+
+        hbox.addWidget(sidebar)
+
+        # ── Right: editor area ───────────────────────────────────
+        editor = QWidget()
+        editor.setStyleSheet("background: #FFF;")
+        ev = QVBoxLayout(editor)
+        ev.setContentsMargins(20, 16, 20, 16)
+        ev.setSpacing(8)
+
+        # Title field (large, bold, Apple Notes style)
+        self._page_title = QLineEdit()
+        self._page_title.setPlaceholderText("标题")
+        self._page_title.setStyleSheet(
+            "QLineEdit { font-size: 22px; font-weight: bold; border: none; "
+            "background: transparent; color: #1D1D1F; padding: 0; }"
+        )
+        self._page_title.textChanged.connect(self._on_title_changed)
+        ev.addWidget(self._page_title)
+
+        # Timestamp label
+        self._page_time = QLabel("")
+        self._page_time.setStyleSheet("font-size: 11px; color: #AAA; padding: 0 0 8px 0;")
+        ev.addWidget(self._page_time)
+
+        # Content editor
+        self._page_content = QTextEdit()
+        self._page_content.setPlaceholderText("开始写点什么...")
+        self._page_content.setStyleSheet(
+            "QTextEdit { font-size: 15px; border: none; background: transparent; "
+            "color: #333; line-height: 1.6; }"
+        )
+        self._page_content.textChanged.connect(self._schedule_save)
+        ev.addWidget(self._page_content, 1)
+
+        hbox.addWidget(editor, 1)
+
+        # Populate page list and select first page
+        self._rebuild_page_list()
         return tab
+
+    # ── page management ────────────────────────────────────────────
+
+    def _new_page(self) -> None:
+        """Create a new blank page and switch to it."""
+        from datetime import datetime
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        page = {
+            "title": "",
+            "content": "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        self._data.setdefault("pages", []).append(page)
+        self._rebuild_page_list()
+        # Select the new page (last item)
+        self._page_list.setCurrentRow(len(self._data["pages"]) - 1)
+        self._page_title.setFocus()
+
+    def _delete_page(self) -> None:
+        """Delete the currently selected page."""
+        if self._current_page_index < 0:
+            return
+        pages = self._data.get("pages", [])
+        if 0 <= self._current_page_index < len(pages):
+            del pages[self._current_page_index]
+        self._rebuild_page_list()
+        self._save_data()
+
+    def _rebuild_page_list(self) -> None:
+        """Refresh the page list from data."""
+        self._page_list.blockSignals(True)
+        self._page_list.clear()
+        for page in self._data.get("pages", []):
+            title = page.get("title", "").strip()
+            display = title if title else "无标题"
+            # Truncate long titles in list
+            if len(display) > 15:
+                display = display[:14] + "…"
+            self._page_list.addItem(display)
+        if self._data.get("pages"):
+            if self._current_page_index >= len(self._data["pages"]):
+                self._current_page_index = 0
+            if self._current_page_index < 0:
+                self._current_page_index = 0
+            self._page_list.setCurrentRow(self._current_page_index)
+        else:
+            self._current_page_index = -1
+        self._page_list.blockSignals(False)
+        self._load_page_into_editor()
+
+    def _on_page_selected(self, index: int) -> None:
+        """Save current page, then load the selected one."""
+        if index < 0:
+            return
+        self._save_current_page()
+        self._current_page_index = index
+        self._load_page_into_editor()
+
+    def _save_current_page(self) -> None:
+        """Flush editor state back into the current page dict."""
+        pages = self._data.get("pages", [])
+        if 0 <= self._current_page_index < len(pages):
+            page = pages[self._current_page_index]
+            page["title"] = self._page_title.text().strip()
+            page["content"] = self._page_content.toPlainText()
+            from datetime import datetime
+            page["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    def _load_page_into_editor(self) -> None:
+        """Display the current page in the editor."""
+        pages = self._data.get("pages", [])
+        if 0 <= self._current_page_index < len(pages):
+            page = pages[self._current_page_index]
+            self._page_title.blockSignals(True)
+            self._page_title.setText(page.get("title", ""))
+            self._page_title.blockSignals(False)
+            self._page_content.blockSignals(True)
+            self._page_content.setPlainText(page.get("content", ""))
+            self._page_content.blockSignals(False)
+            updated = page.get("updated_at") or page.get("created_at", "")
+            self._page_time.setText(f"上次编辑: {updated}" if updated else "")
+        else:
+            self._page_title.clear()
+            self._page_content.clear()
+            self._page_time.setText("")
+
+    def _on_title_changed(self, text: str) -> None:
+        """Update page title in data and refresh list display."""
+        pages = self._data.get("pages", [])
+        if 0 <= self._current_page_index < len(pages):
+            pages[self._current_page_index]["title"] = text.strip()
+            # Update list item text
+            display = text.strip() if text.strip() else "无标题"
+            if len(display) > 15:
+                display = display[:14] + "…"
+            item = self._page_list.item(self._current_page_index)
+            if item:
+                item.setText(display)
+        self._schedule_save()
 
     def _build_todo_tab(self) -> QWidget:
         tab = QWidget()
@@ -519,13 +696,12 @@ class NotebookPanel(QWidget):
     # ── data persistence ────────────────────────────────────────────
 
     def _schedule_save(self) -> None:
-        if hasattr(self, '_notepad') and self._notepad is not None:
-            self._data["notepad"] = self._notepad.toPlainText()
+        # Flush current page editor state before saving
+        self._save_current_page()
         self._save_timer.start(1000)
 
     def _save_data(self) -> None:
-        if hasattr(self, '_notepad') and self._notepad is not None:
-            self._data["notepad"] = self._notepad.toPlainText()
+        self._save_current_page()
         try:
             with open(_DATA_PATH, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
@@ -536,11 +712,23 @@ class NotebookPanel(QWidget):
         try:
             with open(_DATA_PATH, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
-            if isinstance(loaded, dict):
-                self._data = {"notepad": "", "todos": []}
-                self._data.update(loaded)
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            self._data = {"notepad": "", "todos": []}
+            if not isinstance(loaded, dict):
+                raise ValueError("invalid format")
+            # Migrate old format: {"notepad": "...", "todos": [...]}
+            if "pages" not in loaded:
+                old_notepad = loaded.pop("notepad", "")
+                from datetime import datetime
+                now = datetime.now().strftime("%Y-%m-%d %H:%M")
+                loaded["pages"] = [{
+                    "title": "",
+                    "content": old_notepad,
+                    "created_at": now,
+                    "updated_at": now,
+                }] if old_notepad.strip() else []
+            self._data = {"pages": [], "todos": []}
+            self._data.update(loaded)
+        except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError):
+            self._data = {"pages": [], "todos": []}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -631,6 +819,16 @@ def _toggle_chat() -> None:
         from .chat_dialog import _open_chat
         _open_chat()
     _update_launcher_buttons()
+
+
+_wrong_answer_dialog_ref = None
+
+def _toggle_wrong_answer() -> None:
+    """Open the wrong answer dialog (screenshot → MCQ cards)."""
+    global _wrong_answer_dialog_ref
+    from .wrong_answer_dialog import WrongAnswerDialog
+    _wrong_answer_dialog_ref = WrongAnswerDialog(mw)
+    _wrong_answer_dialog_ref.show()
 
 
 # ── Public API ───────────────────────────────────────────────────────
