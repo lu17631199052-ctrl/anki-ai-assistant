@@ -351,16 +351,16 @@ class ChatWidget(QWidget):
         # Quick prompt buttons (numbered 1-4, compact)
         self._prompt_btns: list[QPushButton] = []
         prompt_row = QHBoxLayout()
-        prompt_row.setSpacing(6)
+        prompt_row.setSpacing(8)
         for i in range(4):
             btn = QPushButton(str(i + 1))
-            btn.setFixedSize(28, 28)
+            btn.setFixedSize(30, 30)
             btn.setToolTip("点击发送预设提示词（可在设置中编辑）")
             btn.setStyleSheet(
                 "QPushButton { font-size: 13px; font-weight: bold; "
-                "border: 1.5px solid #D0D5DD; border-radius: 14px; "
-                "background: #FFF; color: #888; } "
-                "QPushButton:hover { background: #4A90D9; border-color: #4A90D9; color: #FFF; }"
+                "border: none; border-radius: 15px; "
+                "background: #EBF3FC; color: #5B9BD5; } "
+                "QPushButton:hover { background: #4A90D9; color: #FFF; }"
             )
             btn.clicked.connect(self._make_prompt_handler(i))
             self._prompt_btns.append(btn)
