@@ -7,7 +7,7 @@ import os
 
 from aqt import mw, gui_hooks
 from aqt.utils import qconnect
-from aqt.qt import QAction, QMenu
+from aqt.qt import QAction, QMenu, QTimer
 
 # Initialize logging as early as possible
 ADDON_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -47,8 +47,9 @@ def _open_settings() -> None:
 
 
 def _open_left_sidebar() -> None:
-    from .ui.left_sidebar import toggle_left_sidebar
-    toggle_left_sidebar()
+    from .ui.left_sidebar import init_launcher, toggle_notebook
+    init_launcher()
+    toggle_notebook("notepad")
 
 
 def _show_log() -> None:
@@ -152,3 +153,9 @@ def _on_reviewer_did_show(card) -> None:
 gui_hooks.reviewer_did_show_question.append(_on_reviewer_did_show)
 
 _setup_menu()
+
+# Initialize left launcher (fixed icon strip) after main window is ready.
+def _delayed_init_launcher():
+    from .ui.left_sidebar import init_launcher
+    init_launcher()
+QTimer.singleShot(500, _delayed_init_launcher)
