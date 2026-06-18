@@ -46,6 +46,11 @@ def _open_settings() -> None:
     dialog.show()
 
 
+def _open_left_sidebar() -> None:
+    from .ui.left_sidebar import toggle_left_sidebar
+    toggle_left_sidebar()
+
+
 def _show_log() -> None:
     from .ui.settings import _show_log_dialog
     _show_log_dialog(mw)
@@ -58,6 +63,12 @@ def _explain_current_card() -> None:
 
 def _setup_menu() -> None:
     menu: QMenu = QMenu("AI Assistant", mw)
+
+    sidebar_action: QAction = QAction("📋 左侧工具栏", mw)
+    qconnect(sidebar_action.triggered, _open_left_sidebar)
+    menu.addAction(sidebar_action)
+
+    menu.addSeparator()
 
     chat_action: QAction = QAction("AI 对话", mw)
     qconnect(chat_action.triggered, _open_chat)
