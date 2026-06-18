@@ -622,6 +622,30 @@ def _open_chat() -> None:
         )
         _dock_widget.destroyed.connect(lambda: _cleanup())
 
+        # Custom title bar (consistent with notebook panel)
+        title_bar = QWidget()
+        title_bar.setStyleSheet("background: #F5F6F8;")
+        tb_layout = QHBoxLayout(title_bar)
+        tb_layout.setContentsMargins(12, 4, 8, 4)
+        tb_layout.setSpacing(4)
+        title_label = QLabel("AI 对话")
+        title_label.setStyleSheet(
+            "font-size: 12px; font-weight: bold; color: #555; background: transparent;"
+        )
+        tb_layout.addWidget(title_label)
+        tb_layout.addStretch()
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(26, 26)
+        close_btn.setToolTip("关闭面板")
+        close_btn.setStyleSheet(
+            "QPushButton { font-size: 14px; border: none; border-radius: 13px; "
+            "background: #E0E0E0; color: #666; } "
+            "QPushButton:hover { background: #D0D0D0; color: #333; }"
+        )
+        close_btn.clicked.connect(lambda: _dock_widget.hide() if _dock_widget else None)
+        tb_layout.addWidget(close_btn)
+        _dock_widget.setTitleBarWidget(title_bar)
+
     _dock_widget.setWidget(_chat_widget)
     mw.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, _dock_widget)
     _chat_widget._is_sidebar = True

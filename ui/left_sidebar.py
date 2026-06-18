@@ -885,8 +885,8 @@ def _ensure_notebook_dock() -> QDockWidget:
     close_btn.setToolTip("关闭面板")
     close_btn.setStyleSheet(
         "QPushButton { font-size: 14px; border: none; border-radius: 13px; "
-        "background: transparent; color: #999; } "
-        "QPushButton:hover { background: #E8E8E8; color: #555; }"
+        "background: #E0E0E0; color: #666; } "
+        "QPushButton:hover { background: #D0D0D0; color: #333; }"
     )
     close_btn.clicked.connect(lambda: _notebook_dock.hide() if _notebook_dock else None)
     tb_layout.addWidget(close_btn)
