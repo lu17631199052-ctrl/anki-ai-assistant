@@ -434,8 +434,8 @@ class NotebookPanel(QWidget):
         collapse_btn.setToolTip("隐藏页面列表")
         collapse_btn.setStyleSheet(
             "QPushButton { font-size: 12px; border: none; border-radius: 13px; "
-            "background: transparent; color: #BBB; } "
-            "QPushButton:hover { background: #E2E2E0; color: #666; }"
+            "background: #E8E8E8; color: #666; } "
+            "QPushButton:hover { background: #D0D0D0; color: #333; }"
         )
         collapse_btn.clicked.connect(self._collapse_nb_sidebar)
         collapse_row = QHBoxLayout()
@@ -501,8 +501,8 @@ class NotebookPanel(QWidget):
         expand_btn.setToolTip("显示页面列表")
         expand_btn.setStyleSheet(
             "QPushButton { font-size: 10px; border: none; border-radius: 4px; "
-            "background: transparent; color: #BBB; } "
-            "QPushButton:hover { background: #E2E2E0; color: #666; }"
+            "background: #E0E0E0; color: #666; } "
+            "QPushButton:hover { background: #D0D0D0; color: #333; }"
         )
         expand_btn.clicked.connect(self._expand_nb_sidebar)
         cs_layout.addWidget(expand_btn)
