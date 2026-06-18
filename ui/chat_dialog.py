@@ -348,19 +348,18 @@ class ChatWidget(QWidget):
         input_layout.addLayout(btn_layout)
         layout.addLayout(input_layout)
 
-        # Quick prompt buttons (numbered 1-4, compact)
+        # Quick prompt buttons (compact text labels)
         self._prompt_btns: list[QPushButton] = []
         prompt_row = QHBoxLayout()
-        prompt_row.setSpacing(8)
+        prompt_row.setSpacing(4)
         for i in range(4):
-            btn = QPushButton(str(i + 1))
-            btn.setFixedSize(30, 30)
+            btn = QPushButton()
             btn.setToolTip("点击发送预设提示词（可在设置中编辑）")
             btn.setStyleSheet(
-                "QPushButton { font-size: 13px; font-weight: bold; "
-                "border: none; border-radius: 15px; "
-                "background: #EBF3FC; color: #5B9BD5; } "
-                "QPushButton:hover { background: #4A90D9; color: #FFF; }"
+                "QPushButton { font-size: 11px; padding: 3px 8px; "
+                "border: 1px solid #D0D5DD; border-radius: 4px; "
+                "background: #FFF; color: #888; } "
+                "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; color: #4A90D9; }"
             )
             btn.clicked.connect(self._make_prompt_handler(i))
             self._prompt_btns.append(btn)
@@ -380,12 +379,16 @@ class ChatWidget(QWidget):
         return handler
 
     def _refresh_prompt_buttons(self) -> None:
-        """Update button tooltips from current config."""
+        """Update button labels and tooltips from current config."""
         from ..config import get_config
         prompts = get_config().get("chat_prompts", [])
         for i, btn in enumerate(self._prompt_btns):
             if i < len(prompts) and prompts[i].strip():
-                btn.setToolTip(prompts[i])
+                text = prompts[i]
+                # Show first 6 chars as label
+                label = text[:6] + ("…" if len(text) > 6 else "")
+                btn.setText(label)
+                btn.setToolTip(text)
                 btn.setVisible(True)
             else:
                 btn.setVisible(False)
