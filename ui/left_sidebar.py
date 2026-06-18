@@ -430,12 +430,12 @@ class NotebookPanel(QWidget):
 
         # Collapse button (top-right of sidebar)
         collapse_btn = QPushButton("◀")
-        collapse_btn.setFixedSize(22, 22)
+        collapse_btn.setFixedSize(26, 26)
         collapse_btn.setToolTip("隐藏页面列表")
         collapse_btn.setStyleSheet(
-            "QPushButton { font-size: 10px; border: 1px solid #DDD; "
-            "border-radius: 4px; background: #FFF; color: #888; } "
-            "QPushButton:hover { background: #EBEBE9; color: #555; }"
+            "QPushButton { font-size: 12px; border: none; border-radius: 13px; "
+            "background: transparent; color: #BBB; } "
+            "QPushButton:hover { background: #E2E2E0; color: #666; }"
         )
         collapse_btn.clicked.connect(self._collapse_nb_sidebar)
         collapse_row = QHBoxLayout()
@@ -488,20 +488,21 @@ class NotebookPanel(QWidget):
 
         # ── Collapsed strip (shown when sidebar hidden) ───────────
         self._nb_collapsed_strip = QWidget()
-        self._nb_collapsed_strip.setFixedWidth(24)
+        self._nb_collapsed_strip.setFixedWidth(26)
         self._nb_collapsed_strip.setStyleSheet(
             "background: #F7F7F5; border-right: 1px solid #E8E8E8;"
         )
         self._nb_collapsed_strip.setCursor(Qt.CursorShape.PointingHandCursor)
         cs_layout = QVBoxLayout(self._nb_collapsed_strip)
-        cs_layout.setContentsMargins(2, 8, 2, 8)
+        cs_layout.setContentsMargins(3, 6, 3, 8)
+        cs_layout.setSpacing(0)
         expand_btn = QPushButton("▶")
-        expand_btn.setFixedSize(20, 20)
+        expand_btn.setFixedSize(20, 24)
         expand_btn.setToolTip("显示页面列表")
         expand_btn.setStyleSheet(
-            "QPushButton { font-size: 10px; border: 1px solid #DDD; "
-            "border-radius: 4px; background: #FFF; color: #888; } "
-            "QPushButton:hover { background: #EBEBE9; color: #555; }"
+            "QPushButton { font-size: 10px; border: none; border-radius: 4px; "
+            "background: transparent; color: #BBB; } "
+            "QPushButton:hover { background: #E2E2E0; color: #666; }"
         )
         expand_btn.clicked.connect(self._expand_nb_sidebar)
         cs_layout.addWidget(expand_btn)
@@ -868,6 +869,28 @@ def _ensure_notebook_dock() -> QDockWidget:
         Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
     )
     _notebook_dock.setMinimumWidth(280)
+
+    # Custom title bar with styled close button
+    title_bar = QWidget()
+    title_bar.setStyleSheet("background: #F5F6F8;")
+    tb_layout = QHBoxLayout(title_bar)
+    tb_layout.setContentsMargins(12, 4, 8, 4)
+    tb_layout.setSpacing(4)
+    title_label = QLabel("学习工具")
+    title_label.setStyleSheet("font-size: 12px; font-weight: bold; color: #555; background: transparent;")
+    tb_layout.addWidget(title_label)
+    tb_layout.addStretch()
+    close_btn = QPushButton("✕")
+    close_btn.setFixedSize(26, 26)
+    close_btn.setToolTip("关闭面板")
+    close_btn.setStyleSheet(
+        "QPushButton { font-size: 14px; border: none; border-radius: 13px; "
+        "background: transparent; color: #999; } "
+        "QPushButton:hover { background: #E8E8E8; color: #555; }"
+    )
+    close_btn.clicked.connect(lambda: _notebook_dock.hide() if _notebook_dock else None)
+    tb_layout.addWidget(close_btn)
+    _notebook_dock.setTitleBarWidget(title_bar)
 
     _notebook_panel = NotebookPanel()
     _notebook_dock.setWidget(_notebook_panel)
