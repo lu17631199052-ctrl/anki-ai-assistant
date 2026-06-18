@@ -429,13 +429,16 @@ class NotebookPanel(QWidget):
         sv.setSpacing(4)
 
         # Collapse button (top-right of sidebar)
-        collapse_btn = QPushButton("◀")
+        collapse_icon = QIcon(os.path.join(_MEDIA_DIR, "collapse.svg"))
+        collapse_btn = QPushButton()
+        collapse_btn.setIcon(collapse_icon)
+        collapse_btn.setIconSize(QSize(14, 14))
         collapse_btn.setFixedSize(26, 26)
         collapse_btn.setToolTip("隐藏页面列表")
         collapse_btn.setStyleSheet(
-            "QPushButton { font-size: 14px; font-weight: bold; border: none; "
-            "border-radius: 13px; background: #E0E0E0; color: #555; } "
-            "QPushButton:hover { background: #C0C0C0; color: #222; }"
+            "QPushButton { border: none; border-radius: 13px; "
+            "background: #E0E0E0; } "
+            "QPushButton:hover { background: #C0C0C0; }"
         )
         collapse_btn.clicked.connect(self._collapse_nb_sidebar)
         collapse_row = QHBoxLayout()
@@ -496,13 +499,16 @@ class NotebookPanel(QWidget):
         cs_layout = QVBoxLayout(self._nb_collapsed_strip)
         cs_layout.setContentsMargins(3, 6, 3, 8)
         cs_layout.setSpacing(0)
-        expand_btn = QPushButton("▶")
+        expand_icon = QIcon(os.path.join(_MEDIA_DIR, "expand.svg"))
+        expand_btn = QPushButton()
+        expand_btn.setIcon(expand_icon)
+        expand_btn.setIconSize(QSize(12, 12))
         expand_btn.setFixedSize(20, 24)
         expand_btn.setToolTip("显示页面列表")
         expand_btn.setStyleSheet(
-            "QPushButton { font-size: 11px; font-weight: bold; border: none; "
-            "border-radius: 4px; background: #E0E0E0; color: #555; } "
-            "QPushButton:hover { background: #C0C0C0; color: #222; }"
+            "QPushButton { border: none; border-radius: 4px; "
+            "background: #E0E0E0; } "
+            "QPushButton:hover { background: #C0C0C0; }"
         )
         expand_btn.clicked.connect(self._expand_nb_sidebar)
         cs_layout.addWidget(expand_btn)
@@ -880,13 +886,16 @@ def _ensure_notebook_dock() -> QDockWidget:
     title_label.setStyleSheet("font-size: 12px; font-weight: bold; color: #555; background: transparent;")
     tb_layout.addWidget(title_label)
     tb_layout.addStretch()
-    close_btn = QPushButton("✕")
+    close_icon = QIcon(os.path.join(_MEDIA_DIR, "close.svg"))
+    close_btn = QPushButton()
+    close_btn.setIcon(close_icon)
+    close_btn.setIconSize(QSize(16, 16))
     close_btn.setFixedSize(26, 26)
     close_btn.setToolTip("关闭面板")
     close_btn.setStyleSheet(
-        "QPushButton { font-size: 16px; font-weight: bold; border: none; "
-        "border-radius: 13px; background: #E0E0E0; color: #555; } "
-        "QPushButton:hover { background: #C0C0C0; color: #222; }"
+        "QPushButton { border: none; border-radius: 13px; "
+        "background: #E0E0E0; } "
+        "QPushButton:hover { background: #C0C0C0; }"
     )
     close_btn.clicked.connect(lambda: _notebook_dock.hide() if _notebook_dock else None)
     tb_layout.addWidget(close_btn)

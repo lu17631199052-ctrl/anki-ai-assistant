@@ -23,6 +23,8 @@ from aqt.qt import (
     Qt,
     QTimer,
     QComboBox,
+    QIcon,
+    QSize,
     QFormLayout,
     QDialogButtonBox,
 )
@@ -634,13 +636,17 @@ def _open_chat() -> None:
         )
         tb_layout.addWidget(title_label)
         tb_layout.addStretch()
-        close_btn = QPushButton("✕")
+        _media = os.path.join(os.path.dirname(os.path.dirname(__file__)), "media")
+        close_icon = QIcon(os.path.join(_media, "close.svg"))
+        close_btn = QPushButton()
+        close_btn.setIcon(close_icon)
+        close_btn.setIconSize(QSize(16, 16))
         close_btn.setFixedSize(26, 26)
         close_btn.setToolTip("关闭面板")
         close_btn.setStyleSheet(
-            "QPushButton { font-size: 16px; font-weight: bold; border: none; "
-            "border-radius: 13px; background: #E0E0E0; color: #555; } "
-            "QPushButton:hover { background: #C0C0C0; color: #222; }"
+            "QPushButton { border: none; border-radius: 13px; "
+            "background: #E0E0E0; } "
+            "QPushButton:hover { background: #C0C0C0; }"
         )
         close_btn.clicked.connect(lambda: _dock_widget.hide() if _dock_widget else None)
         tb_layout.addWidget(close_btn)
