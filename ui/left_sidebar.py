@@ -413,17 +413,34 @@ class NotebookPanel(QWidget):
 
     def _build_notepad_tab(self) -> QWidget:
         tab = QWidget()
-        hbox = QHBoxLayout(tab)
-        hbox.setContentsMargins(0, 0, 0, 0)
-        hbox.setSpacing(0)
+        self._notepad_hbox = QHBoxLayout(tab)
+        self._notepad_hbox.setContentsMargins(0, 0, 0, 0)
+        self._notepad_hbox.setSpacing(0)
 
-        # ── Left: page list sidebar ──────────────────────────────
-        sidebar = QWidget()
-        sidebar.setFixedWidth(150)
-        sidebar.setStyleSheet("background: #F7F7F5; border-right: 1px solid #E8E8E8;")
-        sv = QVBoxLayout(sidebar)
-        sv.setContentsMargins(8, 8, 8, 8)
+        # ── Left: page list sidebar (collapsible) ─────────────────
+        self._nb_sidebar = QWidget()
+        self._nb_sidebar.setFixedWidth(150)
+        self._nb_sidebar.setStyleSheet(
+            "background: #F7F7F5; border-right: 1px solid #E8E8E8;"
+        )
+        sv = QVBoxLayout(self._nb_sidebar)
+        sv.setContentsMargins(8, 4, 8, 8)
         sv.setSpacing(4)
+
+        # Collapse button (top-right of sidebar)
+        collapse_btn = QPushButton("◀")
+        collapse_btn.setFixedSize(22, 22)
+        collapse_btn.setToolTip("隐藏页面列表")
+        collapse_btn.setStyleSheet(
+            "QPushButton { font-size: 10px; border: 1px solid #DDD; "
+            "border-radius: 4px; background: #FFF; color: #888; } "
+            "QPushButton:hover { background: #EBEBE9; color: #555; }"
+        )
+        collapse_btn.clicked.connect(self._collapse_nb_sidebar)
+        collapse_row = QHBoxLayout()
+        collapse_row.addStretch()
+        collapse_row.addWidget(collapse_btn)
+        sv.addLayout(collapse_row)
 
         # New page button
         new_btn = QPushButton("+ 新建页面")
@@ -446,8 +463,8 @@ class NotebookPanel(QWidget):
         self._page_list.currentRowChanged.connect(self._on_page_selected)
         sv.addWidget(self._page_list, 1)
 
-        # Delete page button
-        del_btn = QPushButton("🗑 删除页面")
+        # Delete page button (always visible at bottom)
+        del_btn = QPushButton("🗑 删除当前页面")
         del_btn.setStyleSheet(
             "QPushButton { font-size: 11px; padding: 5px 10px; border: none; "
             "border-radius: 6px; background: transparent; color: #999; text-align: left; } "
@@ -456,7 +473,30 @@ class NotebookPanel(QWidget):
         del_btn.clicked.connect(self._delete_page)
         sv.addWidget(del_btn)
 
-        hbox.addWidget(sidebar)
+        self._notepad_hbox.addWidget(self._nb_sidebar)
+
+        # ── Collapsed strip (shown when sidebar hidden) ───────────
+        self._nb_collapsed_strip = QWidget()
+        self._nb_collapsed_strip.setFixedWidth(24)
+        self._nb_collapsed_strip.setStyleSheet(
+            "background: #F7F7F5; border-right: 1px solid #E8E8E8;"
+        )
+        self._nb_collapsed_strip.setCursor(Qt.CursorShape.PointingHandCursor)
+        cs_layout = QVBoxLayout(self._nb_collapsed_strip)
+        cs_layout.setContentsMargins(2, 8, 2, 8)
+        expand_btn = QPushButton("▶")
+        expand_btn.setFixedSize(20, 20)
+        expand_btn.setToolTip("显示页面列表")
+        expand_btn.setStyleSheet(
+            "QPushButton { font-size: 10px; border: 1px solid #DDD; "
+            "border-radius: 4px; background: #FFF; color: #888; } "
+            "QPushButton:hover { background: #EBEBE9; color: #555; }"
+        )
+        expand_btn.clicked.connect(self._expand_nb_sidebar)
+        cs_layout.addWidget(expand_btn)
+        cs_layout.addStretch()
+        self._nb_collapsed_strip.hide()
+        self._notepad_hbox.addWidget(self._nb_collapsed_strip)
 
         # ── Right: editor area ───────────────────────────────────
         editor = QWidget()
@@ -490,11 +530,21 @@ class NotebookPanel(QWidget):
         self._page_content.textChanged.connect(self._schedule_save)
         ev.addWidget(self._page_content, 1)
 
-        hbox.addWidget(editor, 1)
+        self._notepad_hbox.addWidget(editor, 1)
 
         # Populate page list and select first page
         self._rebuild_page_list()
         return tab
+
+    def _collapse_nb_sidebar(self) -> None:
+        """Hide page list sidebar, show thin strip."""
+        self._nb_sidebar.hide()
+        self._nb_collapsed_strip.show()
+
+    def _expand_nb_sidebar(self) -> None:
+        """Show page list sidebar, hide thin strip."""
+        self._nb_collapsed_strip.hide()
+        self._nb_sidebar.show()
 
     # ── page management ────────────────────────────────────────────
 
