@@ -28,6 +28,7 @@ from aqt.qt import (
     QSize,
     QIcon,
     QEvent,
+    QFileDialog,
 )
 from aqt import mw
 from aqt.utils import tooltip
@@ -463,6 +464,16 @@ class NotebookPanel(QWidget):
         self._page_list.currentRowChanged.connect(self._on_page_selected)
         sv.addWidget(self._page_list, 1)
 
+        # Export button
+        export_btn = QPushButton("📤 导出当前页面")
+        export_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 5px 10px; border: none; "
+            "border-radius: 6px; background: transparent; color: #999; text-align: left; } "
+            "QPushButton:hover { background: #E8F0FE; color: #4A90D9; }"
+        )
+        export_btn.clicked.connect(self._export_current_page)
+        sv.addWidget(export_btn)
+
         # Delete page button (always visible at bottom)
         del_btn = QPushButton("🗑 删除当前页面")
         del_btn.setStyleSheet(
@@ -573,6 +584,35 @@ class NotebookPanel(QWidget):
             del pages[self._current_page_index]
         self._rebuild_page_list()
         self._save_data()
+
+    def _export_current_page(self) -> None:
+        """Export the current page as a Markdown file."""
+        pages = self._data.get("pages", [])
+        if not (0 <= self._current_page_index < len(pages)):
+            tooltip("没有可导出的页面")
+            return
+        page = pages[self._current_page_index]
+        title = page.get("title", "").strip() or "无标题"
+        content = page.get("content", "")
+
+        # Build Markdown
+        md = f"# {title}\n\n{content}"
+
+        # Suggest filename from title
+        safe_title = title.replace("/", "-").replace("\\", "-")[:40]
+        default_name = f"{safe_title}.md"
+
+        path, _ = QFileDialog.getSaveFileName(
+            mw, "导出页面", default_name, "Markdown (*.md);;Text (*.txt)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(md)
+            tooltip(f"已导出: {os.path.basename(path)}")
+        except OSError as e:
+            tooltip(f"导出失败: {e}")
 
     def _rebuild_page_list(self) -> None:
         """Refresh the page list from data."""
