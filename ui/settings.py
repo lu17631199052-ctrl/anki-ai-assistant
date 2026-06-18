@@ -40,13 +40,15 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("AI Assistant 设置")
         self.setMinimumWidth(520)
+        self.resize(540, 580)
         self.cfg = get_config()
         self._build_ui()
         self._load_config()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         self.setStyleSheet("""
             QGroupBox {
@@ -105,6 +107,18 @@ class SettingsDialog(QDialog):
                     stop:0 #E8961A, stop:1 #D48514);
             }
         """)
+
+        # Scroll area wrapping all settings content
+        from aqt.qt import QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_widget = QWidget()
+        layout = QVBoxLayout(scroll_widget)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
+        scroll.setWidget(scroll_widget)
+        main_layout.addWidget(scroll, 1)
 
         # Provider selection
         provider_group = QGroupBox("模型提供商")
@@ -216,21 +230,23 @@ class SettingsDialog(QDialog):
         prompt_group.setLayout(prompt_layout)
         layout.addWidget(prompt_group)
 
-        # Buttons
-        btn_layout = QHBoxLayout()
+        # Buttons pinned at bottom (outside scroll area)
+        btn_layout2 = QHBoxLayout()
+        btn_layout2.setContentsMargins(16, 8, 16, 12)
+
         self.test_btn = QPushButton("🔗 测试连接")
         self.test_btn.setObjectName("outline")
         self.test_btn.clicked.connect(self._test_connection)
         self.test_btn.setMinimumHeight(36)
-        btn_layout.addWidget(self.test_btn)
+        btn_layout2.addWidget(self.test_btn)
 
         self.log_btn = QPushButton("📋 查看日志")
         self.log_btn.setObjectName("outline")
         self.log_btn.clicked.connect(self._show_log)
         self.log_btn.setMinimumHeight(36)
-        btn_layout.addWidget(self.log_btn)
+        btn_layout2.addWidget(self.log_btn)
 
-        btn_layout.addStretch()
+        btn_layout2.addStretch()
 
         self.save_btn = QPushButton("保存")
         self.save_btn.setObjectName("primary")
@@ -238,15 +254,15 @@ class SettingsDialog(QDialog):
         self.save_btn.clicked.connect(self._save)
         self.save_btn.setMinimumHeight(36)
         self.save_btn.setMinimumWidth(100)
-        btn_layout.addWidget(self.save_btn)
+        btn_layout2.addWidget(self.save_btn)
 
         self.cancel_btn = QPushButton("取消")
         self.cancel_btn.setObjectName("outline")
         self.cancel_btn.clicked.connect(self.reject)
         self.cancel_btn.setMinimumHeight(36)
-        btn_layout.addWidget(self.cancel_btn)
+        btn_layout2.addWidget(self.cancel_btn)
 
-        layout.addLayout(btn_layout)
+        main_layout.addLayout(btn_layout2)
 
     def _show_log(self) -> None:
         _show_log_dialog(self)
