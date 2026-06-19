@@ -222,10 +222,13 @@ class BrowserSearchPanel(QWidget):
             # Set zoom after page loads
             self._web_view.loadFinished.connect(self._on_load_finished)
 
-            # Load the default engine's homepage
-            home_url = self._get_home_url(self._default_engine)
-            self._web_view.setUrl(QUrl.fromUserInput(home_url))
-            self._current_url = home_url
+            # Test: load local HTML first to verify webview can render
+            self._web_view.setHtml(
+                "<html><body style='background:#FAFBFC;display:flex;align-items:center;"
+                "justify-content:center;height:100vh;font-family:sans-serif;'>"
+                "<p style='color:#999;font-size:16px;'>⏳ 正在加载搜索引擎...</p>"
+                "</body></html>"
+            )
 
             layout.addWidget(self._web_view, 1)
         else:
@@ -249,6 +252,13 @@ class BrowserSearchPanel(QWidget):
 <body style='font-family:sans-serif;background:#FAFBFC;padding:20px;'>
 <h2>🌐 浏览器搜索</h2><p style='color:#888;'>点击搜索引擎在系统浏览器打开</p>
 {cards}</body></html>"""
+
+    def load_homepage(self) -> None:
+        """Load the default engine homepage. Called when dock is first shown."""
+        if self._web_view is not None and not self._current_url:
+            home_url = self._get_home_url(self._default_engine)
+            self._web_view.setUrl(QUrl.fromUserInput(home_url))
+            self._current_url = home_url
 
     def _on_load_finished(self, ok: bool) -> None:
         if ok and self._web_view is not None:
@@ -358,6 +368,7 @@ def _toggle_browser_search() -> None:
         dock.show()
         dock.raise_()
         if _browser_panel is not None:
+            _browser_panel.load_homepage()
             _browser_panel._search_input.setFocus()
     _update_launcher_buttons()
 
@@ -367,5 +378,6 @@ def _open_browser_search() -> None:
     dock.show()
     dock.raise_()
     if _browser_panel is not None:
+        _browser_panel.load_homepage()
         _browser_panel._search_input.setFocus()
     _update_launcher_buttons()
