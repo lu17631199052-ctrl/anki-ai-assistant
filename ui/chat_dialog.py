@@ -298,6 +298,10 @@ class ChatWidget(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.scroll_area.setMinimumHeight(60)
         self.msg_container = QWidget()
         self.msg_layout = QVBoxLayout(self.msg_container)
         self.msg_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -305,9 +309,15 @@ class ChatWidget(QWidget):
         self.scroll_area.setWidget(self.msg_container)
         layout.addWidget(self.scroll_area, 1)
 
-        # Input area
-        input_layout = QHBoxLayout()
+        # Input area — wrapped in a widget to prevent being squeezed
+        input_wrapper = QWidget()
+        input_wrapper.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        input_layout = QHBoxLayout(input_wrapper)
+        input_layout.setContentsMargins(0, 0, 0, 0)
         self.input_edit = QTextEdit()
+        self.input_edit.setMinimumHeight(40)
         self.input_edit.setMaximumHeight(80)
         self.input_edit.setPlaceholderText("输入问题... (Ctrl+Enter 发送)")
         self.input_edit.installEventFilter(self)
@@ -346,7 +356,7 @@ class ChatWidget(QWidget):
         self.clear_btn.clicked.connect(self._clear)
         btn_layout.addWidget(self.clear_btn)
         input_layout.addLayout(btn_layout)
-        layout.addLayout(input_layout)
+        layout.addWidget(input_wrapper)
 
         # Quick prompt buttons (1 2 3 4, match existing button style)
         self._prompt_btns: list[QPushButton] = []
