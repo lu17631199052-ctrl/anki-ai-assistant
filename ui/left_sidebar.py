@@ -198,10 +198,11 @@ class LauncherWidget(QWidget):
 
         # ── Tool icons ────────────────────────────────────────────
         tool_icons = [
-            ("notebook",    "notebook",    "记事本", "记事本 — 随时记录想法"),
-            ("todo",        "todo",        "待办",   "待办清单"),
-            ("wrong_answer","wrong_answer","错题",   "AI 错题整理 — 截图识别"),
-            ("chat",        "chat",        "AI对话", "AI 学习助手对话"),
+            ("notebook",       "notebook",       "记事本", "记事本 — 随时记录想法"),
+            ("todo",           "todo",           "待办",   "待办清单"),
+            ("wrong_answer",   "wrong_answer",   "错题",   "AI 错题整理 — 截图识别"),
+            ("chat",           "chat",           "AI对话", "AI 学习助手对话"),
+            ("browser_search", "browser",        "搜索",   "浏览器搜索 — 百度/谷歌/Bing/B站/YouTube"),
         ]
 
         for key, icon_name, label, tooltip_text in tool_icons:
@@ -291,6 +292,8 @@ class LauncherWidget(QWidget):
                 _toggle_wrong_answer()
             elif key == "chat":
                 _toggle_chat()
+            elif key == "browser_search":
+                _toggle_browser_search()
         return handler
 
     def _open_settings(self) -> None:
@@ -362,7 +365,7 @@ class LauncherWidget(QWidget):
         # Update label colors
         for container in self.findChildren(QWidget):
             lbl = container.findChild(QLabel)
-            if lbl and lbl.text() in ("记事本", "待办", "AI对话", "设置"):
+            if lbl and lbl.text() in ("记事本", "待办", "AI对话", "搜索", "设置"):
                 btn = container.findChild(QPushButton)
                 if btn and btn.isChecked():
                     lbl.setStyleSheet(
@@ -929,6 +932,13 @@ def _update_launcher_buttons() -> None:
             _launcher.set_active("chat", chat_dock.isVisible())
     except Exception:
         pass
+    # Browser search dock check
+    try:
+        from .browser_search import _browser_dock as browser_dock
+        if browser_dock is not None:
+            _launcher.set_active("browser_search", browser_dock.isVisible())
+    except Exception:
+        pass
 
 
 def _toggle_chat() -> None:
@@ -942,6 +952,17 @@ def _toggle_chat() -> None:
     except Exception:
         from .chat_dialog import _open_chat
         _open_chat()
+    _update_launcher_buttons()
+
+
+def _toggle_browser_search() -> None:
+    """Toggle the browser search dock."""
+    try:
+        from .browser_search import _toggle_browser_search as _toggle
+        _toggle()
+    except Exception:
+        from .browser_search import _open_browser_search
+        _open_browser_search()
     _update_launcher_buttons()
 
 

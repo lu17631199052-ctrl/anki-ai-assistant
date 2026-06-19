@@ -40,6 +40,11 @@ def _open_wrong_answer() -> None:
     _wrong_answer_dialog.show()
 
 
+def _open_browser_search() -> None:
+    from .ui.browser_search import _open_browser_search as _browser_open
+    _browser_open()
+
+
 def _open_settings() -> None:
     from .ui.settings import SettingsDialog
     dialog = SettingsDialog(mw)
@@ -86,6 +91,10 @@ def _setup_menu() -> None:
     wrong_answer_action: QAction = QAction("AI 错题整理", mw)
     qconnect(wrong_answer_action.triggered, _open_wrong_answer)
     menu.addAction(wrong_answer_action)
+
+    browser_search_action: QAction = QAction("🌐 浏览器搜索", mw)
+    qconnect(browser_search_action.triggered, _open_browser_search)
+    menu.addAction(browser_search_action)
 
     menu.addSeparator()
 
