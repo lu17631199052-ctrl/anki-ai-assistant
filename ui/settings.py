@@ -22,8 +22,10 @@ from aqt.qt import (
     QFrame,
     QScrollArea,
     QTabWidget,
+    QSizePolicy,
     Qt,
     QApplication,
+    QScreen,
 )
 from aqt.utils import showInfo, showWarning, tooltip
 from aqt import mw
@@ -43,8 +45,15 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Assistant 设置")
-        self.setMinimumWidth(520)
-        self.resize(540, 580)
+        self.setMinimumWidth(480)
+        # Limit height to 85% of screen height
+        screen = QApplication.primaryScreen()
+        if screen:
+            max_h = int(screen.availableGeometry().height() * 0.85)
+        else:
+            max_h = 700
+        self.setMaximumHeight(max_h)
+        self.resize(540, min(600, max_h))
         self.cfg = get_config()
         self._build_ui()
         self._load_config()
@@ -219,7 +228,12 @@ class SettingsDialog(QDialog):
         tab_model_layout.addWidget(card_group)
 
         tab_model_layout.addStretch()
-        tabs.addTab(tab_model, "🔧 模型设置")
+        tab_model_scroll = QScrollArea()
+        tab_model_scroll.setWidgetResizable(True)
+        tab_model_scroll.setWidget(tab_model)
+        tab_model_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        tab_model_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tabs.addTab(tab_model_scroll, "🔧 模型设置")
 
         # ── Tab 1: Quick prompts ─────────────────────────────────────
         tab_prompt = QWidget()
@@ -262,7 +276,12 @@ class SettingsDialog(QDialog):
         prompt_group.setLayout(prompt_layout)
         tab_prompt_layout.addWidget(prompt_group)
         tab_prompt_layout.addStretch()
-        tabs.addTab(tab_prompt, "💬 快捷提示词")
+        tab_prompt_scroll = QScrollArea()
+        tab_prompt_scroll.setWidgetResizable(True)
+        tab_prompt_scroll.setWidget(tab_prompt)
+        tab_prompt_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        tab_prompt_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        tabs.addTab(tab_prompt_scroll, "💬 快捷提示词")
 
         # Buttons pinned at bottom (outside scroll area)
         btn_layout2 = QHBoxLayout()
