@@ -54,7 +54,7 @@ font-size:12px;color:#8D6E00;text-align:center;line-height:1.6;}}
 💡 <b>提示：</b>在顶部搜索框输入关键词，按 <b>Enter</b> 或用按钮搜索<br>
 可在「设置 → 快捷提示词」中修改默认搜索引擎
 </div>
-</body></html>"
+</body></html>"""
 
 
 class BrowserSearchPanel(QWidget):
