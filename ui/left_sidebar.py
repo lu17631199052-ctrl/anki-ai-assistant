@@ -926,6 +926,8 @@ def _update_launcher_buttons() -> None:
         tab = _notebook_panel.current_tab()
         _launcher.set_active("notebook", visible and tab == "notepad")
         _launcher.set_active("todo", visible and tab == "todo")
+        # Logo button is a shortcut for notebook+notepad
+        _launcher.set_active("logo", visible and tab == "notepad")
     # Chat dock check
     try:
         from .chat_dialog import _dock_widget as chat_dock
