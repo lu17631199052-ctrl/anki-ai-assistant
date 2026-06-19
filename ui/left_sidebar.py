@@ -227,10 +227,11 @@ class LauncherWidget(QWidget):
         layout.addWidget(self._sep2, 0, Qt.AlignmentFlag.AlignCenter)
         layout.addSpacing(4)
 
-        # ── Settings gear ─────────────────────────────────────────
+        # ── Settings gear (non-checkable — one-shot dialog) ─────
         settings_item = self._create_icon_with_label("settings", "设置", "插件设置")
         sbtn = settings_item.findChild(QPushButton)
         if sbtn:
+            sbtn.setCheckable(False)
             sbtn.clicked.connect(self._open_settings)
             sbtn.installEventFilter(self)
             self._buttons["settings"] = sbtn
