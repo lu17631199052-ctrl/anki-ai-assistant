@@ -172,6 +172,9 @@ class BrowserSearchPanel(QWidget):
         if HAS_WEBENGINE:
             self._web_view = QWebEngineView()
             self._web_view.setStyleSheet("border: none; background: #FFF;")
+            # Load default page immediately so it's not blank
+            self._web_view.load(QUrl("https://www.google.com"))
+            self._current_url = "https://www.google.com"
             layout.addWidget(self._web_view, 1)
         else:
             # Fallback: label with instructions
