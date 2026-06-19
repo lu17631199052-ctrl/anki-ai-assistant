@@ -126,21 +126,21 @@ class BrowserSearchPanel(QWidget):
         el.setStyleSheet("font-size:11px;color:#888;background:transparent;")
         er.addWidget(el)
 
+        self._engine_btns: dict[str, QPushButton] = {}
         for e in ENGINES:
             btn = QPushButton(e["name"])
-            btn.setToolTip(f"在 {e['name']} 搜索")
-            btn.setStyleSheet(
-                f"QPushButton{{font-size:11px;padding:3px 10px;"
-                f"border:1px solid {e['color']};border-radius:4px;"
-                f"background:#FFF;color:{e['color']};font-weight:bold;}}"
-                f"QPushButton:hover{{background:{e['color']};color:white;}}"
-            )
-            btn.clicked.connect(self._on_engine(e["name"]))
+            btn.setToolTip(f"设为默认引擎（{e['name']}），输入关键词后 Enter 搜索")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(self._on_engine_btn(e["name"]))
+            self._engine_btns[e["name"]] = btn
             er.addWidget(btn)
 
         er.addStretch()
         tb.addLayout(er)
         layout.addWidget(top)
+
+        # Apply initial active style
+        self._update_engine_btn_styles()
 
         # ── Welcome page ───────────────────────────────────────────
         browser = QTextBrowser()
@@ -149,9 +149,32 @@ class BrowserSearchPanel(QWidget):
         browser.setHtml(_welcome_html())
         layout.addWidget(browser, 1)
 
-    def _on_engine(self, name: str):
+    def _update_engine_btn_styles(self) -> None:
+        """Highlight the active default engine button."""
+        for name, btn in self._engine_btns.items():
+            e = next(e for e in ENGINES if e["name"] == name)
+            c = e["color"]
+            if name == self._default_engine:
+                btn.setStyleSheet(
+                    f"QPushButton{{font-size:11px;padding:3px 10px;"
+                    f"border:1px solid {c};border-radius:4px;"
+                    f"background:{c};color:white;font-weight:bold;}}"
+                )
+            else:
+                btn.setStyleSheet(
+                    f"QPushButton{{font-size:11px;padding:3px 10px;"
+                    f"border:1px solid {c};border-radius:4px;"
+                    f"background:#FFF;color:{c};font-weight:bold;}}"
+                    f"QPushButton:hover{{background:{c};color:white;}}"
+                )
+
+    def _on_engine_btn(self, name: str):
+        """Clicking an engine button switches the default engine, does NOT search."""
         def handler():
-            self._search(name)
+            self._default_engine = name
+            self._update_engine_btn_styles()
+            self._input.setPlaceholderText(f"输入搜索关键词... (Enter 用 {name} 搜索)")
+            self._input.setFocus()
         return handler
 
     def _search(self, engine: str) -> None:
