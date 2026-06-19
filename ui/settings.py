@@ -45,7 +45,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Assistant 设置")
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(540)
         # Limit height to 85% of screen height
         screen = QApplication.primaryScreen()
         if screen:
@@ -53,7 +53,7 @@ class SettingsDialog(QDialog):
         else:
             max_h = 700
         self.setMaximumHeight(max_h)
-        self.resize(540, min(600, max_h))
+        self.resize(580, min(620, max_h))
         self.cfg = get_config()
         self._build_ui()
         self._load_config()
