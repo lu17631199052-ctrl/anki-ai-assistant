@@ -20,6 +20,7 @@ from aqt.qt import (
     Qt,
     QSize,
     QIcon,
+    QUrl,
 )
 from aqt import mw
 from aqt.utils import tooltip
@@ -210,7 +211,7 @@ class BrowserSearchPanel(QWidget):
         url = engine["url"].format(query=quote(query))
 
         if self._web_view is not None:
-            self._web_view.load(url)
+            self._web_view.load(QUrl(url))
             self._current_url = url
             tooltip(f"已在 {engine_name} 搜索: {query}")
         else:
