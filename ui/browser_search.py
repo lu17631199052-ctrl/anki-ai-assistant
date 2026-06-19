@@ -1,7 +1,7 @@
-"""Browser search panel — embedded web search docked on the right side.
+"""Browser search panel — search bar + engine shortcuts, opens in system browser.
 
-Supports: Baidu, Google, Bilibili, YouTube.
-Uses QWebEngineView when available, falls back to system browser.
+Shows a styled local welcome page in the panel.  Searches always open in
+the system default web browser for maximum reliability and full browser UI.
 """
 
 import os
@@ -17,6 +17,7 @@ from aqt.qt import (
     QPushButton,
     QLabel,
     QWidget,
+    QTextBrowser,
     Qt,
     QSize,
     QIcon,
@@ -24,21 +25,6 @@ from aqt.qt import (
 )
 from aqt import mw
 from aqt.utils import tooltip
-
-# ── Try QWebEngineView (available in both PyQt5 and PyQt6 via Anki) ──
-try:
-    from aqt.qt import QWebEngineView  # type: ignore
-    HAS_WEBENGINE = True
-except ImportError:
-    try:
-        from PyQt5.QtWebEngineWidgets import QWebEngineView  # type: ignore
-        HAS_WEBENGINE = True
-    except ImportError:
-        try:
-            from PyQt6.QtWebEngineWidgets import QWebEngineView  # type: ignore
-            HAS_WEBENGINE = True
-        except ImportError:
-            HAS_WEBENGINE = False
 
 # ── singleton references ──────────────────────────────────────────────
 _browser_dock: Optional[QDockWidget] = None
@@ -52,34 +38,107 @@ SEARCH_ENGINES = [
     {
         "name": "百度",
         "url": "https://www.baidu.com/s?wd={query}",
+        "home": "https://www.baidu.com",
         "color": "#4E6EF2",
-        "hover_color": "#3B54D4",
+        "icon": "🔵",
+        "desc": "中文搜索",
     },
     {
         "name": "Google",
         "url": "https://www.google.com/search?q={query}",
+        "home": "https://www.google.com",
         "color": "#4285F4",
-        "hover_color": "#3367D6",
+        "icon": "🌐",
+        "desc": "全球搜索",
     },
     {
         "name": "Bing",
         "url": "https://www.bing.com/search?q={query}",
+        "home": "https://www.bing.com",
         "color": "#00809D",
-        "hover_color": "#006B84",
+        "icon": "🔍",
+        "desc": "微软搜索",
     },
     {
         "name": "B站",
         "url": "https://search.bilibili.com/all?keyword={query}",
+        "home": "https://www.bilibili.com",
         "color": "#FB7299",
-        "hover_color": "#E25D80",
+        "icon": "📺",
+        "desc": "视频搜索",
     },
     {
         "name": "YouTube",
         "url": "https://www.youtube.com/results?search_query={query}",
+        "home": "https://www.youtube.com",
         "color": "#FF0000",
-        "hover_color": "#CC0000",
+        "icon": "▶️",
+        "desc": "视频搜索",
     },
 ]
+
+
+def _build_welcome_html() -> str:
+    """Build a styled welcome page showing all search engines."""
+    cards = ""
+    for e in SEARCH_ENGINES:
+        cards += f"""
+        <div class='engine-card' onclick='openUrl("{e["home"]}")'
+             style='border-left: 3px solid {e["color"]};'>
+            <span class='engine-icon'>{e["icon"]}</span>
+            <div class='engine-info'>
+                <span class='engine-name' style='color:{e["color"]};'>{e["name"]}</span>
+                <span class='engine-desc'>{e["desc"]}</span>
+            </div>
+            <span class='engine-arrow'>→</span>
+        </div>"""
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{
+    font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif;
+    background: #FAFBFC; color: #333;
+    padding: 24px 20px;
+}}
+h2 {{
+    font-size: 18px; color: #555; margin-bottom: 6px;
+    text-align: center; font-weight: 600;
+}}
+.subtitle {{
+    font-size: 12px; color: #999; text-align: center;
+    margin-bottom: 20px;
+}}
+.engine-card {{
+    display: flex; align-items: center; gap: 10px;
+    background: #FFF; border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 8px;
+    cursor: pointer; transition: all 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}}
+.engine-card:hover {{
+    background: #F0F4FF; box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    transform: translateX(2px);
+}}
+.engine-icon {{ font-size: 24px; }}
+.engine-info {{ display: flex; flex-direction: column; flex: 1; }}
+.engine-name {{ font-size: 14px; font-weight: 600; }}
+.engine-desc {{ font-size: 11px; color: #999; }}
+.engine-arrow {{ font-size: 16px; color: #CCC; }}
+.hint {{
+    margin-top: 20px; padding: 12px; background: #FFF8E1;
+    border-radius: 8px; font-size: 12px; color: #8D6E00;
+    text-align: center; line-height: 1.6;
+}}
+</style></head><body>
+<h2>🌐 浏览器搜索</h2>
+<p class='subtitle'>输入关键词后按 Enter 或点击下方引擎</p>
+{cards}
+<div class='hint'>
+💡 <b>提示：</b>搜索结果将在<b>系统默认浏览器</b>中打开<br>
+在设置中可以修改默认搜索引擎
+</div>
+</body></html>"""
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -90,7 +149,6 @@ class BrowserSearchPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._current_url = ""
         self._default_engine = self._get_default_engine()
         self._build_ui()
 
@@ -100,7 +158,6 @@ class BrowserSearchPanel(QWidget):
         try:
             from ..config import get_config
             engine = get_config().get("default_search_engine", "Google")
-            # Validate it's a known engine
             for e in SEARCH_ENGINES:
                 if e["name"] == engine:
                     return engine
@@ -109,21 +166,21 @@ class BrowserSearchPanel(QWidget):
         return "Google"
 
     @staticmethod
-    def _get_engine_url(engine_name: str, query: str) -> str:
-        """Get URL for an engine. If query is empty, return homepage."""
-        if query:
-            for e in SEARCH_ENGINES:
-                if e["name"] == engine_name:
-                    return e["url"].format(query=quote(query))
-        # Homepages
-        homepages = {
-            "百度": "https://www.baidu.com",
-            "Google": "https://www.google.com",
-            "Bing": "https://www.bing.com",
-            "B站": "https://www.bilibili.com",
-            "YouTube": "https://www.youtube.com",
-        }
-        return homepages.get(engine_name, "https://www.google.com")
+    def _get_search_url(engine_name: str, query: str) -> str:
+        """Get search URL for an engine and query."""
+        for e in SEARCH_ENGINES:
+            if e["name"] == engine_name:
+                return e["url"].format(query=quote(query))
+        # Fallback
+        return f"https://www.google.com/search?q={quote(query)}"
+
+    @staticmethod
+    def _get_home_url(engine_name: str) -> str:
+        """Get homepage URL for an engine."""
+        for e in SEARCH_ENGINES:
+            if e["name"] == engine_name:
+                return e["home"]
+        return "https://www.google.com"
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -175,7 +232,7 @@ class BrowserSearchPanel(QWidget):
 
         for engine in SEARCH_ENGINES:
             btn = QPushButton(engine["name"])
-            btn.setToolTip(f"在 {engine['name']} 搜索")
+            btn.setToolTip(f"在 {engine['name']} 搜索（系统浏览器打开）")
             btn.setStyleSheet(
                 f"QPushButton {{ font-size: 11px; padding: 3px 10px; "
                 f"border: 1px solid {engine['color']}; border-radius: 4px; "
@@ -185,46 +242,26 @@ class BrowserSearchPanel(QWidget):
             btn.clicked.connect(self._make_engine_handler(engine))
             engine_row.addWidget(btn)
 
-        # Open in external browser button
-        ext_btn = QPushButton("↗ 外部打开")
-        ext_btn.setToolTip("在系统浏览器中打开当前页面")
-        ext_btn.setStyleSheet(
-            "QPushButton { font-size: 11px; padding: 3px 10px; "
-            "border: 1px solid #D0D5DD; border-radius: 4px; "
-            "background: #FFF; color: #888; } "
-            "QPushButton:hover { background: #F5F7FA; border-color: #4A90D9; color: #4A90D9; }"
-        )
-        ext_btn.clicked.connect(self._open_external)
-        engine_row.addWidget(ext_btn)
-
         engine_row.addStretch()
         tb_layout.addLayout(engine_row)
 
         layout.addWidget(top_bar)
 
-        # ── Web view or fallback ───────────────────────────────────
-        if HAS_WEBENGINE:
-            self._web_view = QWebEngineView()
-            self._web_view.setStyleSheet("border: none; background: #FFF;")
-            # Scale page to fit panel width without horizontal scrolling
-            self._web_view.setZoomFactor(0.75)
-            # Load the default engine's homepage immediately
-            default_url = self._get_engine_url(self._default_engine, "")
-            self._web_view.load(QUrl(default_url))
-            self._current_url = default_url
-            layout.addWidget(self._web_view, 1)
-        else:
-            # Fallback: label with instructions
-            fallback = QLabel(
-                "<div style='text-align:center; padding:40px; color:#888;'>"
-                "<p style='font-size:16px;'>🔍 浏览器搜索</p>"
-                "<p style='font-size:13px;'>输入关键词后点击搜索引擎按钮</p>"
-                "<p style='font-size:12px;'>将在系统默认浏览器中打开结果</p>"
-                "</div>"
-            )
-            fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(fallback, 1)
-            self._web_view = None
+        # ── Welcome page (local HTML, no external loading needed) ───
+        self._browser = QTextBrowser()
+        self._browser.setOpenExternalLinks(False)  # We handle links ourselves
+        self._browser.setStyleSheet(
+            "QTextBrowser { border: none; background: #FAFBFC; }"
+        )
+        self._browser.setHtml(_build_welcome_html())
+        # Intercept link clicks → open in system browser
+        self._browser.anchorClicked.connect(self._on_welcome_link)
+        layout.addWidget(self._browser, 1)
+
+    def _on_welcome_link(self, url: QUrl) -> None:
+        """Open links from the welcome page in system browser."""
+        webbrowser.open(url.toString())
+        tooltip("已在系统浏览器打开")
 
     def _make_engine_handler(self, engine: dict):
         """Return a click handler for an engine button."""
@@ -233,41 +270,15 @@ class BrowserSearchPanel(QWidget):
         return handler
 
     def _search(self, engine_name: str) -> None:
-        """Perform a search with the given engine."""
+        """Search with the given engine — always opens system browser."""
         query = self._search_input.text().strip()
         if not query:
             tooltip("请输入搜索关键词")
             return
 
-        # Find engine config
-        engine = None
-        for e in SEARCH_ENGINES:
-            if e["name"] == engine_name:
-                engine = e
-                break
-        if engine is None:
-            engine = {"name": self._default_engine, "url": self._get_engine_url(self._default_engine, "{query}")}
-
-        url = engine["url"].format(query=quote(query))
-
-        if self._web_view is not None:
-            self._web_view.load(QUrl(url))
-            self._current_url = url
-            tooltip(f"已在 {engine_name} 搜索: {query}")
-        else:
-            webbrowser.open(url)
-            tooltip(f"已在系统浏览器打开 {engine_name} 搜索: {query}")
-
-    def _open_external(self) -> None:
-        """Open current page in system browser."""
-        if self._web_view is not None and self._current_url:
-            webbrowser.open(self._current_url)
-            tooltip("已在系统浏览器打开")
-        elif self._search_input.text().strip():
-            query = self._search_input.text().strip()
-            url = self._get_engine_url(self._default_engine, query)
-            webbrowser.open(url)
-            tooltip(f"已在系统浏览器打开 {self._default_engine} 搜索")
+        url = self._get_search_url(engine_name, query)
+        webbrowser.open(url)
+        tooltip(f"已在系统浏览器用 {engine_name} 搜索: {query}")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -286,7 +297,7 @@ def _ensure_browser_dock() -> QDockWidget:
     _browser_dock.setAllowedAreas(
         Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
     )
-    _browser_dock.setMinimumWidth(420)
+    _browser_dock.setMinimumWidth(380)
 
     # Custom title bar
     title_bar = QWidget()
@@ -346,7 +357,6 @@ def _toggle_browser_search() -> None:
     else:
         dock.show()
         dock.raise_()
-        # Focus search input
         if _browser_panel is not None:
             _browser_panel._search_input.setFocus()
     _update_launcher_buttons()
