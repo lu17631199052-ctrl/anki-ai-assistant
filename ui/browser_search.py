@@ -1,4 +1,4 @@
-"""Browser search panel — embedded search via AnkiWebView + system browser fallback."""
+"""Browser search panel — embedded web search in right sidebar."""
 
 import os
 import webbrowser
@@ -7,8 +7,7 @@ from urllib.parse import quote
 
 from aqt.qt import (
     QDockWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-    QPushButton, QLabel, QWidget, QTextBrowser,
-    Qt, QSize, QIcon, QUrl,
+    QPushButton, QLabel, QWidget, Qt, QSize, QIcon, QUrl,
 )
 from aqt import mw
 from aqt.utils import tooltip
@@ -25,36 +24,11 @@ ENGINES = [
     {"name": "YouTube", "search": "https://www.youtube.com/results?search_query={q}", "color": "#FF0000"},
 ]
 
-
-def _welcome_html() -> str:
-    cards = ""
-    for e in ENGINES:
-        cards += (
-            f'<div style="display:flex;align-items:center;gap:8px;'
-            f'background:#FFF;border-radius:8px;padding:10px 14px;margin-bottom:6px;'
-            f'border-left:3px solid {e["color"]};box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
-            f'<span style="font-size:14px;font-weight:600;color:{e["color"]};">{e["name"]}</span>'
-            f'<span style="flex:1;"></span>'
-            f'<span style="font-size:11px;color:#AAA;">点击上方按钮搜索</span>'
-            f'</div>'
-        )
-    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-*{{margin:0;padding:0;box-sizing:border-box;}}
-body{{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-background:#FAFBFC;color:#333;padding:20px 18px;}}
-h2{{font-size:17px;color:#555;text-align:center;margin-bottom:6px;}}
-.sub{{font-size:12px;color:#999;text-align:center;margin-bottom:18px;}}
-.hint{{margin-top:16px;padding:10px;background:#FFF8E1;border-radius:8px;
-font-size:12px;color:#8D6E00;text-align:center;line-height:1.6;}}
-</style></head><body>
-<h2>🌐 浏览器搜索</h2>
-<p class="sub">输入关键词 → 选择搜索引擎 → 在系统浏览器中打开结果</p>
-{cards}
-<div class="hint">
-💡 <b>提示：</b>在顶部搜索框输入关键词，按 <b>Enter</b> 或用按钮搜索<br>
-可在「设置 → 快捷提示词」中修改默认搜索引擎
-</div>
-</body></html>"""
+try:
+    from aqt.qt import QWebEngineView
+    HAS_WEB = True
+except ImportError:
+    HAS_WEB = False
 
 
 class BrowserSearchPanel(QWidget):
@@ -62,7 +36,8 @@ class BrowserSearchPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._default_engine = self._get_default()
-        self._web_view = None  # AnkiWebView if available
+        self._current_url = ""
+        self._web_view = None
         self._build_ui()
 
     @staticmethod
@@ -83,6 +58,12 @@ class BrowserSearchPanel(QWidget):
                 return e["search"].format(q=quote(query))
         return f"https://www.google.com/search?q={quote(query)}"
 
+    def _home_url(self, engine: str) -> str:
+        homes = {"Google": "https://www.google.com", "百度": "https://www.baidu.com",
+                 "Bing": "https://www.bing.com", "B站": "https://www.bilibili.com",
+                 "YouTube": "https://www.youtube.com"}
+        return homes.get(engine, "https://www.google.com")
+
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -98,7 +79,7 @@ class BrowserSearchPanel(QWidget):
         sr = QHBoxLayout()
         sr.setSpacing(4)
         self._input = QLineEdit()
-        self._input.setPlaceholderText(f"输入搜索关键词... (Enter 用 {self._default_engine} 搜索)")
+        self._input.setPlaceholderText("输入搜索关键词... (Enter 搜索)")
         self._input.setStyleSheet(
             "QLineEdit{font-size:13px;border:1px solid #D0D5DD;"
             "border-radius:6px;padding:6px 10px;background:#FFF;}"
@@ -123,58 +104,70 @@ class BrowserSearchPanel(QWidget):
         el.setStyleSheet("font-size:11px;color:#888;background:transparent;")
         er.addWidget(el)
 
-        self._engine_btns: dict[str, QPushButton] = {}
+        self._engine_btns = {}
         for e in ENGINES:
             btn = QPushButton(e["name"])
-            btn.setToolTip(f"设为默认引擎（{e['name']}），输入关键词后 Enter 搜索")
+            btn.setToolTip(f"设为默认引擎（{e['name']}）")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(self._on_engine_btn(e["name"]))
             self._engine_btns[e["name"]] = btn
             er.addWidget(btn)
+
+        ext = QPushButton("↗ 外部打开")
+        ext.setToolTip("在系统浏览器打开当前页面")
+        ext.setStyleSheet(
+            "QPushButton{font-size:11px;padding:3px 8px;border:1px solid #D0D5DD;"
+            "border-radius:4px;background:#FFF;color:#888;}"
+            "QPushButton:hover{background:#F5F7FA;border-color:#4A90D9;}"
+        )
+        ext.clicked.connect(self._open_external)
+        er.addWidget(ext)
         er.addStretch()
         tb.addLayout(er)
         layout.addWidget(top)
 
-        # Update button active styles
-        self._update_engine_btn_styles()
+        self._update_engine_styles()
 
-        # ── Content area: try AnkiWebView, fallback to welcome ─────
-        try:
-            from aqt.webview import AnkiWebView, AnkiWebViewKind
-            self._web_view = AnkiWebView(kind=AnkiWebViewKind.DEFAULT)
+        # ── Web view ───────────────────────────────────────────────
+        if HAS_WEB:
+            self._web_view = QWebEngineView()
             self._web_view.setStyleSheet("border:none;background:#FFF;")
-            # Try loading the search engine homepage
-            home_url = self._get_home_url(self._default_engine)
-            self._web_view.setUrl(QUrl(home_url))
-            # Set zoom after load
-            if hasattr(self._web_view, 'loadFinished'):
-                self._web_view.loadFinished.connect(self._on_load_finished)
+            home = self._home_url(self._default_engine)
+            self._web_view.load(QUrl(home))
+            self._current_url = home
+            self._web_view.loadFinished.connect(self._on_load)
             layout.addWidget(self._web_view, 1)
-        except Exception:
-            browser = QTextBrowser()
-            browser.setOpenExternalLinks(True)
-            browser.setStyleSheet("QTextBrowser{border:none;background:#FAFBFC;}")
-            browser.setHtml(_welcome_html())
+        else:
+            browser = self._fallback_browser()
             layout.addWidget(browser, 1)
 
-    def _get_home_url(self, engine: str) -> str:
-        homes = {
-            "Google": "https://www.google.com",
-            "百度": "https://www.baidu.com",
-            "Bing": "https://www.bing.com",
-            "B站": "https://www.bilibili.com",
-            "YouTube": "https://www.youtube.com",
-        }
-        return homes.get(engine, "https://www.google.com")
+    def _fallback_browser(self):
+        from aqt.qt import QTextBrowser
+        cards = ""
+        for e in ENGINES:
+            cards += (
+                f'<div style="padding:10px;margin:4px 0;background:#FFF;border-radius:8px;'
+                f'border-left:3px solid {e["color"]};font-size:14px;">{e["name"]}</div>'
+            )
+        w = QTextBrowser()
+        w.setOpenExternalLinks(True)
+        w.setStyleSheet("QTextBrowser{border:none;background:#FAFBFC;}")
+        w.setHtml(f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{{margin:0;padding:0;}}body{{font-family:sans-serif;background:#FAFBFC;padding:20px;}}
+h2{{color:#555;text-align:center;margin-bottom:16px;}}
+.hint{{margin-top:16px;padding:10px;background:#FFF8E1;border-radius:8px;font-size:12px;color:#8D6E00;text-align:center;}}
+</style></head><body><h2>🌐 浏览器搜索</h2>{cards}
+<div class="hint">💡 搜索将在系统浏览器中打开</div></body></html>""")
+        return w
 
-    def _on_load_finished(self, ok: bool) -> None:
-        if ok and self._web_view is not None:
+    def _on_load(self, ok: bool) -> None:
+        if ok and self._web_view:
             try:
                 self._web_view.setZoomFactor(0.75)
             except Exception:
                 pass
 
-    def _update_engine_btn_styles(self) -> None:
+    def _update_engine_styles(self) -> None:
         for name, btn in self._engine_btns.items():
             e = next(e for e in ENGINES if e["name"] == name)
             c = e["color"]
@@ -195,8 +188,12 @@ class BrowserSearchPanel(QWidget):
     def _on_engine_btn(self, name: str):
         def handler():
             self._default_engine = name
-            self._update_engine_btn_styles()
-            self._input.setPlaceholderText(f"输入搜索关键词... (Enter 用 {name} 搜索)")
+            self._update_engine_styles()
+            # Also load this engine's homepage in the webview
+            if self._web_view:
+                home = self._home_url(name)
+                self._web_view.load(QUrl(home))
+                self._current_url = home
             self._input.setFocus()
         return handler
 
@@ -206,12 +203,20 @@ class BrowserSearchPanel(QWidget):
             tooltip("请输入搜索关键词")
             return
         url = self._search_url(engine, q)
-        if self._web_view is not None:
-            self._web_view.setUrl(QUrl(url))
+        if self._web_view:
+            self._web_view.load(QUrl(url))
+            self._current_url = url
             tooltip(f"在 {engine} 搜索: {q}")
         else:
             webbrowser.open(url)
             tooltip(f"已在系统浏览器用 {engine} 搜索: {q}")
+
+    def _open_external(self) -> None:
+        if self._current_url:
+            webbrowser.open(self._current_url)
+        else:
+            webbrowser.open(self._home_url(self._default_engine))
+        tooltip("已在系统浏览器打开")
 
 
 # ═══════════════════════════════════════════════════════════════════════
