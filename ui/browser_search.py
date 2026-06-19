@@ -91,7 +91,39 @@ class BrowserSearchPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_url = ""
+        self._default_engine = self._get_default_engine()
         self._build_ui()
+
+    @staticmethod
+    def _get_default_engine() -> str:
+        """Read the user's preferred default search engine from config."""
+        try:
+            from ..config import get_config
+            engine = get_config().get("default_search_engine", "Google")
+            # Validate it's a known engine
+            for e in SEARCH_ENGINES:
+                if e["name"] == engine:
+                    return engine
+        except Exception:
+            pass
+        return "Google"
+
+    @staticmethod
+    def _get_engine_url(engine_name: str, query: str) -> str:
+        """Get URL for an engine. If query is empty, return homepage."""
+        if query:
+            for e in SEARCH_ENGINES:
+                if e["name"] == engine_name:
+                    return e["url"].format(query=quote(query))
+        # Homepages
+        homepages = {
+            "百度": "https://www.baidu.com",
+            "Google": "https://www.google.com",
+            "Bing": "https://www.bing.com",
+            "B站": "https://www.bilibili.com",
+            "YouTube": "https://www.youtube.com",
+        }
+        return homepages.get(engine_name, "https://www.google.com")
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -116,7 +148,9 @@ class BrowserSearchPanel(QWidget):
             "border-radius: 6px; padding: 6px 10px; background: #FFF; } "
             "QLineEdit:focus { border-color: #4A90D9; }"
         )
-        self._search_input.returnPressed.connect(lambda: self._search("Google"))
+        self._search_input.returnPressed.connect(
+            lambda: self._search(self._default_engine)
+        )
         search_row.addWidget(self._search_input, 1)
 
         search_btn = QPushButton("搜索")
@@ -127,7 +161,7 @@ class BrowserSearchPanel(QWidget):
             "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
             "stop:0 #4A90D9, stop:1 #357ABD); }"
         )
-        search_btn.clicked.connect(lambda: self._search("Google"))
+        search_btn.clicked.connect(lambda: self._search(self._default_engine))
         search_row.addWidget(search_btn)
         tb_layout.addLayout(search_row)
 
@@ -172,9 +206,10 @@ class BrowserSearchPanel(QWidget):
         if HAS_WEBENGINE:
             self._web_view = QWebEngineView()
             self._web_view.setStyleSheet("border: none; background: #FFF;")
-            # Load default page immediately so it's not blank
-            self._web_view.load(QUrl("https://www.google.com"))
-            self._current_url = "https://www.google.com"
+            # Load the default engine's homepage immediately
+            default_url = self._get_engine_url(self._default_engine, "")
+            self._web_view.load(QUrl(default_url))
+            self._current_url = default_url
             layout.addWidget(self._web_view, 1)
         else:
             # Fallback: label with instructions
@@ -209,7 +244,7 @@ class BrowserSearchPanel(QWidget):
                 engine = e
                 break
         if engine is None:
-            engine = SEARCH_ENGINES[1]  # default to Google
+            engine = {"name": self._default_engine, "url": self._get_engine_url(self._default_engine, "{query}")}
 
         url = engine["url"].format(query=quote(query))
 
@@ -228,8 +263,9 @@ class BrowserSearchPanel(QWidget):
             tooltip("已在系统浏览器打开")
         elif self._search_input.text().strip():
             query = self._search_input.text().strip()
-            webbrowser.open(f"https://www.google.com/search?q={quote(query)}")
-            tooltip("已在系统浏览器打开 Google 搜索")
+            url = self._get_engine_url(self._default_engine, query)
+            webbrowser.open(url)
+            tooltip(f"已在系统浏览器打开 {self._default_engine} 搜索")
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -83,6 +83,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "请为这张卡片的内容生成3道选择题",
         "请用一个通俗易懂的比喻帮助我理解这个知识点",
     ],
+    # Default search engine for browser panel (Enter key)
+    "default_search_engine": "Google",
 }
 
 

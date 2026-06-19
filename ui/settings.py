@@ -227,6 +227,16 @@ class SettingsDialog(QDialog):
         tab_prompt_layout.setContentsMargins(16, 12, 16, 12)
         tab_prompt_layout.setSpacing(12)
 
+        # Search engine default
+        search_group = QGroupBox("浏览器搜索 — 默认搜索引擎（在搜索框中按 Enter 使用）")
+        search_layout = QFormLayout()
+        self.search_engine_combo = QComboBox()
+        for engine in ["百度", "Google", "Bing", "B站", "YouTube"]:
+            self.search_engine_combo.addItem(engine)
+        search_layout.addRow("默认引擎:", self.search_engine_combo)
+        search_group.setLayout(search_layout)
+        tab_prompt_layout.addWidget(search_group)
+
         prompt_group = QGroupBox("AI 对话快捷提示词（显示在输入框下方的 1-4 号按钮）")
         prompt_layout = QFormLayout()
         self.prompt_edits: list[QTextEdit] = []
@@ -336,6 +346,12 @@ class SettingsDialog(QDialog):
 
         self.md_to_html_check.setChecked(self.cfg.get("md_to_html", False))
 
+        # Load default search engine
+        engine = self.cfg.get("default_search_engine", "Google")
+        idx = self.search_engine_combo.findText(engine)
+        if idx >= 0:
+            self.search_engine_combo.setCurrentIndex(idx)
+
         # Load chat prompts
         prompts = self.cfg.get("chat_prompts", [])
         for i, edit in enumerate(self.prompt_edits):
@@ -379,6 +395,7 @@ class SettingsDialog(QDialog):
         self.cfg["default_note_type"] = self.default_note_type_combo.currentData()
         self.cfg["md_to_html"] = self.md_to_html_check.isChecked()
         self.cfg["chat_prompts"] = [e.toPlainText().strip() for e in self.prompt_edits]
+        self.cfg["default_search_engine"] = self.search_engine_combo.currentText()
         self.cfg["vision_provider"] = self.vision_provider_combo.currentData()
         self.cfg["vision_api_key"] = self.vision_api_key_edit.text().strip()
         self.cfg["vision_model"] = self.vision_model_combo.currentText().strip()
