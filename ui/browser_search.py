@@ -1,4 +1,4 @@
-"""Browser search panel — search bar + engine shortcuts, opens results in system browser."""
+"""Browser search panel — embedded search via AnkiWebView + system browser fallback."""
 
 import os
 import webbrowser
@@ -8,7 +8,7 @@ from urllib.parse import quote
 from aqt.qt import (
     QDockWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
     QPushButton, QLabel, QWidget, QTextBrowser,
-    Qt, QSize, QIcon,
+    Qt, QSize, QIcon, QUrl,
 )
 from aqt import mw
 from aqt.utils import tooltip
@@ -27,7 +27,6 @@ ENGINES = [
 
 
 def _welcome_html() -> str:
-    """Simple instruction page shown below the search bar."""
     cards = ""
     for e in ENGINES:
         cards += (
@@ -55,7 +54,7 @@ font-size:12px;color:#8D6E00;text-align:center;line-height:1.6;}}
 💡 <b>提示：</b>在顶部搜索框输入关键词，按 <b>Enter</b> 或用按钮搜索<br>
 可在「设置 → 快捷提示词」中修改默认搜索引擎
 </div>
-</body></html>"""
+</body></html>"
 
 
 class BrowserSearchPanel(QWidget):
@@ -63,6 +62,7 @@ class BrowserSearchPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._default_engine = self._get_default()
+        self._web_view = None  # AnkiWebView if available
         self._build_ui()
 
     @staticmethod
@@ -88,19 +88,17 @@ class BrowserSearchPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # ── Top bar: search input + engine buttons ─────────────────
+        # ── Top bar ────────────────────────────────────────────────
         top = QWidget()
         top.setStyleSheet("background:#F5F6F8;border-bottom:1px solid #E0E0E0;")
         tb = QVBoxLayout(top)
         tb.setContentsMargins(8, 6, 8, 6)
         tb.setSpacing(5)
 
-        # Row 1: search input + search button
         sr = QHBoxLayout()
         sr.setSpacing(4)
-
         self._input = QLineEdit()
-        self._input.setPlaceholderText("输入搜索关键词... (Enter 搜索)")
+        self._input.setPlaceholderText(f"输入搜索关键词... (Enter 用 {self._default_engine} 搜索)")
         self._input.setStyleSheet(
             "QLineEdit{font-size:13px;border:1px solid #D0D5DD;"
             "border-radius:6px;padding:6px 10px;background:#FFF;}"
@@ -119,7 +117,6 @@ class BrowserSearchPanel(QWidget):
         sr.addWidget(sbtn)
         tb.addLayout(sr)
 
-        # Row 2: engine buttons
         er = QHBoxLayout()
         er.setSpacing(6)
         el = QLabel("搜索引擎:")
@@ -134,23 +131,50 @@ class BrowserSearchPanel(QWidget):
             btn.clicked.connect(self._on_engine_btn(e["name"]))
             self._engine_btns[e["name"]] = btn
             er.addWidget(btn)
-
         er.addStretch()
         tb.addLayout(er)
         layout.addWidget(top)
 
-        # Apply initial active style
+        # Update button active styles
         self._update_engine_btn_styles()
 
-        # ── Welcome page ───────────────────────────────────────────
-        browser = QTextBrowser()
-        browser.setOpenExternalLinks(True)
-        browser.setStyleSheet("QTextBrowser{border:none;background:#FAFBFC;}")
-        browser.setHtml(_welcome_html())
-        layout.addWidget(browser, 1)
+        # ── Content area: try AnkiWebView, fallback to welcome ─────
+        try:
+            from aqt.webview import AnkiWebView, AnkiWebViewKind
+            self._web_view = AnkiWebView(kind=AnkiWebViewKind.DEFAULT)
+            self._web_view.setStyleSheet("border:none;background:#FFF;")
+            # Try loading the search engine homepage
+            home_url = self._get_home_url(self._default_engine)
+            self._web_view.setUrl(QUrl(home_url))
+            # Set zoom after load
+            if hasattr(self._web_view, 'loadFinished'):
+                self._web_view.loadFinished.connect(self._on_load_finished)
+            layout.addWidget(self._web_view, 1)
+        except Exception:
+            browser = QTextBrowser()
+            browser.setOpenExternalLinks(True)
+            browser.setStyleSheet("QTextBrowser{border:none;background:#FAFBFC;}")
+            browser.setHtml(_welcome_html())
+            layout.addWidget(browser, 1)
+
+    def _get_home_url(self, engine: str) -> str:
+        homes = {
+            "Google": "https://www.google.com",
+            "百度": "https://www.baidu.com",
+            "Bing": "https://www.bing.com",
+            "B站": "https://www.bilibili.com",
+            "YouTube": "https://www.youtube.com",
+        }
+        return homes.get(engine, "https://www.google.com")
+
+    def _on_load_finished(self, ok: bool) -> None:
+        if ok and self._web_view is not None:
+            try:
+                self._web_view.setZoomFactor(0.75)
+            except Exception:
+                pass
 
     def _update_engine_btn_styles(self) -> None:
-        """Highlight the active default engine button."""
         for name, btn in self._engine_btns.items():
             e = next(e for e in ENGINES if e["name"] == name)
             c = e["color"]
@@ -169,7 +193,6 @@ class BrowserSearchPanel(QWidget):
                 )
 
     def _on_engine_btn(self, name: str):
-        """Clicking an engine button switches the default engine, does NOT search."""
         def handler():
             self._default_engine = name
             self._update_engine_btn_styles()
@@ -183,8 +206,12 @@ class BrowserSearchPanel(QWidget):
             tooltip("请输入搜索关键词")
             return
         url = self._search_url(engine, q)
-        webbrowser.open(url)
-        tooltip(f"已在系统浏览器用 {engine} 搜索: {q}")
+        if self._web_view is not None:
+            self._web_view.setUrl(QUrl(url))
+            tooltip(f"在 {engine} 搜索: {q}")
+        else:
+            webbrowser.open(url)
+            tooltip(f"已在系统浏览器用 {engine} 搜索: {q}")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -201,7 +228,7 @@ def _ensure_browser_dock() -> QDockWidget:
     _browser_dock.setAllowedAreas(
         Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
     )
-    _browser_dock.setMinimumWidth(380)
+    _browser_dock.setMinimumWidth(420)
 
     bar = QWidget()
     bar.setStyleSheet("background:#F5F6F8;")
