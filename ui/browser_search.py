@@ -206,6 +206,8 @@ class BrowserSearchPanel(QWidget):
         if HAS_WEBENGINE:
             self._web_view = QWebEngineView()
             self._web_view.setStyleSheet("border: none; background: #FFF;")
+            # Scale page to fit panel width without horizontal scrolling
+            self._web_view.setZoomFactor(0.75)
             # Load the default engine's homepage immediately
             default_url = self._get_engine_url(self._default_engine, "")
             self._web_view.load(QUrl(default_url))
@@ -284,7 +286,7 @@ def _ensure_browser_dock() -> QDockWidget:
     _browser_dock.setAllowedAreas(
         Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea
     )
-    _browser_dock.setMinimumWidth(300)
+    _browser_dock.setMinimumWidth(420)
 
     # Custom title bar
     title_bar = QWidget()
