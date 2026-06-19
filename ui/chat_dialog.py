@@ -665,6 +665,7 @@ def _open_chat() -> None:
             | QDockWidget.DockWidgetFeature.DockWidgetClosable
         )
         _dock_widget.destroyed.connect(lambda: _cleanup())
+        _dock_widget.visibilityChanged.connect(lambda v: _sync_launcher())
 
         # Custom title bar (consistent with notebook panel)
         title_bar = QWidget()
@@ -700,6 +701,15 @@ def _open_chat() -> None:
     _chat_widget.dock_btn.setText("⬆ 弹出窗口")
     _dock_widget.show()
     _dock_widget.raise_()
+
+
+def _sync_launcher() -> None:
+    """Notify left sidebar to refresh button states."""
+    try:
+        from .left_sidebar import _update_launcher_buttons as _update
+        _update()
+    except Exception:
+        pass
 
 
 def _cleanup() -> None:
