@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI助手 — 你的 Anki 全能 AI 学习助手</title>
+<meta name="description" content="国内 AI 大模型一键直连的 Anki 桌面插件，支持 DeepSeek / 通义千问 / 智谱 / Kimi / Ollama。AI 对话、卡片解释、智能生成卡片、错题截图识别，覆盖全场景学习需求。">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f6ef7' stroke-width='1.5'><path d='M15.5 13a3.5 3.5 0 0 0-3.5 3.5v1a3.5 3.5 0 0 0 7 0v-1.8'/><path d='M8.5 13a3.5 3.5 0 0 1 3.5 3.5v1a3.5 3.5 0 0 1-7 0v-1.8'/><path d='M17.5 16a3.5 3.5 0 0 0 0-7h-.5'/><path d='M19 9.3v-2.8a3.5 3.5 0 0 0-7 0'/><path d='M6.5 16a3.5 3.5 0 0 1 0-7h.5'/><path d='M5 9.3v-2.8a3.5 3.5 0 0 1 7 0v10'/></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ═══ Navigation ═══════════════════════════════════ -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4f6ef7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 13a3.5 3.5 0 0 0-3.5 3.5v1a3.5 3.5 0 0 0 7 0v-1.8"/><path d="M8.5 13a3.5 3.5 0 0 1 3.5 3.5v1a3.5 3.5 0 0 1-7 0v-1.8"/><path d="M17.5 16a3.5 3.5 0 0 0 0-7h-.5"/><path d="M19 9.3v-2.8a3.5 3.5 0 0 0-7 0"/><path d="M6.5 16a3.5 3.5 0 0 1 0-7h.5"/><path d="M5 9.3v-2.8a3.5 3.5 0 0 1 7 0v10"/></svg>
+      AI助手
+    </a>
+    <ul class="nav-items">
+      <li><a href="#features">功能</a></li>
+      <li><a href="#providers">AI 平台</a></li>
+      <li><a href="#install">安装配置</a></li>
+      <li><a href="#shortcuts">快捷键</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="#install" class="nav-cta">免费安装</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ═══ Hero ══════════════════════════════════════════ -->
+<header class="hero">
+  <div class="hero-badge">
+    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;"></span>
+    稳定版 v1.11.0 · 兼容 Anki 23.10+
+  </div>
+  <h1><span class="gradient">AI助手</span><br>你的 Anki 全能学习伴侣</h1>
+  <p class="hero-desc">国内 AI 大模型一键直连，无需代理，开箱即用。DeepSeek / 通义千问 / 智谱 / Kimi / Ollama，覆盖卡片解释、智能生成、错题识别、AI 对话等全场景学习需求。</p>
+  <p class="hero-note">🖥 桌面版 Anki 插件（macOS / Windows）— 不支持 AnkiMobile / AnkiDroid</p>
+  <div class="hero-actions">
+    <a href="#install" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      安装指南
+    </a>
+    <a href="https://github.com/lu17631199052-ctrl/anki-ai-assistant" target="_blank" class="btn btn-white">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.905-.015 3.3 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12 24 5.37 18.63 0 12 0z"/></svg>
+      GitHub
+    </a>
+    <a href="https://ankiweb.net/shared/info/1778462484" target="_blank" class="btn btn-ghost">AnkiWeb 下载 →</a>
+  </div>
+</header>
+
+<!-- ═══ Features ══════════════════════════════════════ -->
+<section class="section" id="features">
+  <div class="section-inner">
+    <div class="section-eyebrow">核心功能</div>
+    <h2 class="section-title">六大模块，覆盖全场景学习</h2>
+    <p class="section-sub">从卡片解释到错题整理，从 AI 对话到智能生成，一套插件搞定所有 AI 学习需求。</p>
+
+    <div class="grid-3">
+      <div class="card">
+        <div class="card-icon" style="background:#eef2ff;">🧠</div>
+        <h3>左侧工具栏</h3>
+        <p>固定图标栏常驻 Anki 窗口左侧，所有功能一键触达。记事本、待办清单、AI 面板无缝切换，图标 hover 动效，夜间模式自动适配。</p>
+      </div>
+
+      <div class="card">
+        <div class="card-icon" style="background:#e8f5e9;">💬</div>
+        <h3>AI 对话</h3>
+        <p>流式 Markdown 渲染，支持表格 / 代码块 / 列表等完整语法。自动获取当前卡片上下文，侧边栏固定与浮动窗口一键切换。每个回答附带复制、写入卡片、创建卡片操作按钮。</p>
+        <span class="kbd">^Q / Ctrl+Shift+Q</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon" style="background:#fff3e0;">🔍</div>
+        <h3>AI 解释卡片</h3>
+        <p>选中任意卡片一键触发 AI 深度解析，流式输出，自动引用卡片背面内容。解析结果可直接添加到卡片背面或创建新卡片。</p>
+        <span class="kbd">^W / Ctrl+Shift+W</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon" style="background:#fce4ec;">📝</div>
+        <h3>AI 生成卡片</h3>
+        <p>从文本 / Markdown / PDF / Word(.docx) / 图片中智能提取内容。扫描版 PDF 调用视觉模型 OCR，多文件批量上传，预览确认后一键导入指定牌组。</p>
+        <span class="kbd">^E / Ctrl+Shift+E</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon" style="background:#ede7f6;">❌</div>
+        <h3>AI 错题整理</h3>
+        <p>截图或粘贴错题图片 → 视觉模型自动识别题目 → 智能生成选择题（MCQ）。专属交互式选择题模板：正面点击选项，背面自动判对错。</p>
+        <span class="kbd">^R / Ctrl+Shift+R</span>
+      </div>
+
+      <div class="card">
+        <div class="card-icon" style="background:#e0f7fa;">🌐</div>
+        <h3>浏览器搜索</h3>
+        <p>内嵌浏览器面板，选中卡片文字即可搜索。一键切换百度 / Google / Bing / B 站 / YouTube，也可在外部浏览器打开。边复习边查资料，无需切换窗口。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Details ═══════════════════════════════════════ -->
+<section class="section section-alt">
+  <div class="section-inner">
+    <div class="section-eyebrow">细节设计</div>
+    <h2 class="section-title">不只功能多，更要好用</h2>
+    <p class="section-sub">每个交互细节都为学习体验反复打磨。</p>
+
+    <div class="grid-4">
+      <div class="card">
+        <div class="card-icon" style="background:#fff8e1;">⚙</div>
+        <h3>视觉模型独立配置</h3>
+        <p>截图识别、扫描件 OCR 可独立配置视觉模型，未设置自动回退主模型。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:#f3e5f5;">📋</div>
+        <h3>记事本 + 待办</h3>
+        <p>Apple Notes 风格多页记事本 + checkbox 待办，本地存储，复习间隙随手记录。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:#e8eaf6;">🎯</div>
+        <h3>快捷提示词</h3>
+        <p>4 个可编辑快捷按钮，设置中自定义常用问题，面板上一键发送，支持仅填充模式。</p>
+      </div>
+      <div class="card">
+        <div class="card-icon" style="background:#fbe9e7;">🔄</div>
+        <h3>消息排队机制</h3>
+        <p>AI 回复期间可继续输入，上一轮结束自动发送下一条，无需等待，效率翻倍。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Providers ═════════════════════════════════════ -->
+<section class="section" id="providers">
+  <div class="section-inner">
+    <div class="section-eyebrow">AI 平台</div>
+    <h2 class="section-title">六大平台，国内直连</h2>
+    <p class="section-sub">无需代理，开箱即用。也支持任意 OpenAI 兼容自定义 API。</p>
+
+    <div class="provider-list">
+      <div class="provider">
+        <div class="emoji">🐳</div>
+        <h4>DeepSeek</h4>
+        <span>性价比极高，推荐日常使用</span>
+      </div>
+      <div class="provider">
+        <div class="emoji">☁️</div>
+        <h4>通义千问（阿里）</h4>
+        <span>中文能力强，免费额度充足</span>
+      </div>
+      <div class="provider">
+        <div class="emoji">🔮</div>
+        <h4>智谱 GLM</h4>
+        <span>清华系，中文理解出色</span>
+      </div>
+      <div class="provider">
+        <div class="emoji">🌙</div>
+        <h4>Kimi (Moonshot)</h4>
+        <span>超长上下文 128K，长文处理利器</span>
+      </div>
+      <div class="provider">
+        <div class="emoji">🦙</div>
+        <h4>Ollama</h4>
+        <span>本地部署，完全免费离线</span>
+      </div>
+      <div class="provider">
+        <div class="emoji">🔧</div>
+        <h4>自定义 API</h4>
+        <span>任意 OpenAI 兼容接口均可接入</span>
+      </div>
+    </div>
+
+    <div class="alert alert-info" style="margin-top:28px;max-width:700px;">
+      💡 <strong>推荐组合：</strong>日常对话用 DeepSeek（便宜快），截图识别用通义千问 VL（中文 OCR 强），长文处理用 Kimi（128K 上下文）。视觉模型可在设置中独立分配。
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Install ═══════════════════════════════════════ -->
+<section class="section section-alt" id="install">
+  <div class="section-inner">
+    <div class="section-eyebrow">快速开始</div>
+    <h2 class="section-title">三步安装，即刻使用</h2>
+    <p class="section-sub">安装简单，配置快捷，激活你的 AI 学习助手。</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h4>安装插件</h4>
+        <p>从 AnkiWeb 下载 .ankiaddon 文件，拖入 Anki 主窗口即可安装，重启 Anki。</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h4>配置 API</h4>
+        <p>点击左侧工具栏底部齿轮图标进入设置，选择 AI 提供商，填入 API Key，点击「测试连接」。</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h4>开始使用</h4>
+        <p>复习卡片时按快捷键或点击左侧工具栏图标，即可使用各项 AI 功能。</p>
+      </div>
+    </div>
+
+    <div class="alert alert-info" style="margin-top:32px;">
+      <strong>🔑 获取 API Key（各平台注册即送免费额度）：</strong>
+      <div class="api-box">
+        <a href="https://platform.deepseek.com" target="_blank"><strong>🐳 DeepSeek</strong><span>platform.deepseek.com</span></a>
+        <a href="https://dashscope.aliyun.com" target="_blank"><strong>☁️ 通义千问</strong><span>dashscope.aliyun.com</span></a>
+        <a href="https://open.bigmodel.cn" target="_blank"><strong>🔮 智谱 GLM</strong><span>open.bigmodel.cn</span></a>
+        <a href="https://platform.moonshot.cn" target="_blank"><strong>🌙 Kimi</strong><span>platform.moonshot.cn</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Detailed Usage ════════════════════════════════ -->
+<section class="section" id="usage">
+  <div class="section-inner">
+    <div class="section-eyebrow">使用指南</div>
+    <h2 class="section-title">各功能详细说明</h2>
+    <p class="section-sub">快速掌握每个功能的最佳用法。</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>🧠 左侧工具栏</h3>
+        <p>安装后 Anki 窗口左侧自动出现固定图标栏。图标从上到下依次为：记事本、待办清单、AI 对话、AI 错题整理、AI 生成卡片、浏览器搜索、设置。点击图标在右侧展开对应面板，再次点击或按关闭按钮收起。可通过菜单栏「AI Assistant → 📋 左侧工具栏」重新打开。</p>
+      </div>
+      <div class="card">
+        <h3>💬 AI 对话</h3>
+        <p>打开后自动获取当前复习卡片的正反面内容作为上下文。输入问题后 AI 流式回复，完整支持 Markdown 语法。每个回复下方有操作按钮：<strong>复制</strong>全部内容、<strong>写入卡片背面</strong>、<strong>创建新卡片</strong>。点击右上角按钮在侧边栏固定和浮动窗口间切换。AI 回复期间可继续输入新问题，消息自动排队。</p>
+      </div>
+      <div class="card">
+        <h3>🔍 AI 解释卡片</h3>
+        <p>在复习界面选中任意卡片，按快捷键触发。AI 自动读取卡片正面（题目）和背面（答案），流式输出深度解析。解析窗口底部可一键将内容<strong>添加到卡片背面</strong>或<strong>创建新卡片</strong>。</p>
+      </div>
+      <div class="card">
+        <h3>📝 AI 生成卡片</h3>
+        <p>支持多种输入方式：粘贴文本、上传文件（txt / md / pdf / docx / 图片）、粘贴图片。扫描版 PDF 自动调用视觉模型 OCR 识别。上传后可自定义生成数量、目标语言、目标牌组，预览确认后一键导入。</p>
+      </div>
+      <div class="card">
+        <h3>❌ AI 错题整理</h3>
+        <p>截取错题图片或粘贴到窗口 → 视觉模型自动识别题目内容和选项 → AI 解析正确答案并生成选择题（MCQ）→ 预览确认后添加到专用"选择题"笔记类型。复习时正面点击选项交互，背面自动显示对错。</p>
+      </div>
+      <div class="card">
+        <h3>🌐 浏览器搜索</h3>
+        <p>选中卡片上的文字后打开搜索面板，自动带入选中文字。顶部可切换搜索引擎（百度 / Google / Bing / B 站 / YouTube），也可点击「在外部浏览器打开」跳转到系统默认浏览器。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Shortcuts ═════════════════════════════════════ -->
+<section class="section section-alt" id="shortcuts">
+  <div class="section-inner">
+    <div class="section-eyebrow">快捷键</div>
+    <h2 class="section-title">复习界面快捷键速查</h2>
+    <p class="section-sub">复习卡片时无需鼠标，一键触发 AI 功能。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>功能</th><th>macOS</th><th>Windows</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>🔍 AI 解释卡片</td>
+            <td><kbd>^</kbd> <kbd>W</kbd></td>
+            <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>W</kbd></td>
+          </tr>
+          <tr>
+            <td>❌ AI 错题整理</td>
+            <td><kbd>^</kbd> <kbd>R</kbd></td>
+            <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd></td>
+          </tr>
+          <tr>
+            <td>💬 AI 对话（切换）</td>
+            <td><kbd>^</kbd> <kbd>Q</kbd></td>
+            <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Q</kbd></td>
+          </tr>
+          <tr>
+            <td>📝 AI 生成卡片</td>
+            <td><kbd>^</kbd> <kbd>E</kbd></td>
+            <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>E</kbd></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="alert alert-warning" style="margin-top:18px;">
+      ⚠️ <strong>注意：</strong>Mac 用户请按 <strong>Control (^)</strong> 键而非 Command (⌘)。Windows 用户必须同时按 <strong>Ctrl+Shift</strong> 以避开 Anki 内置快捷键（Ctrl+W 关闭窗口、Ctrl+Q 退出等）。
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Compatibility ═════════════════════════════════ -->
+<section class="section">
+  <div class="section-inner">
+    <div class="section-eyebrow">兼容性</div>
+    <h2 class="section-title">桌面端专用</h2>
+    <p class="section-sub">本插件基于 PyQt 开发，专为桌面版 Anki 打造。</p>
+
+    <div class="compat-grid">
+      <div class="compat-card">
+        <div class="icon">🍎</div>
+        <div class="label">macOS</div>
+        <div class="sublabel">Intel + Apple Silicon</div>
+      </div>
+      <div class="compat-card">
+        <div class="icon">🪟</div>
+        <div class="label">Windows</div>
+        <div class="sublabel">Qt5 / Qt6 均支持</div>
+      </div>
+      <div class="compat-card">
+        <div class="icon">🌙</div>
+        <div class="label">夜间模式</div>
+        <div class="sublabel">自动适配深色主题</div>
+      </div>
+      <div class="compat-card">
+        <div class="icon">📦</div>
+        <div class="label">Anki 23.10+</div>
+        <div class="sublabel">最低版本要求</div>
+      </div>
+    </div>
+
+    <div class="alert alert-danger" style="margin-top:24px;max-width:700px;">
+      ⚠️ <strong>不支持移动端：</strong>本插件不支持 AnkiMobile（iPhone/iPad）和 AnkiDroid（Android），因为这些平台不支持 Qt 插件系统。请使用 macOS 或 Windows 桌面版 Anki。
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FAQ ═══════════════════════════════════════════ -->
+<section class="section section-alt" id="faq">
+  <div class="section-inner">
+    <div class="section-eyebrow">常见问题</div>
+    <h2 class="section-title">FAQ</h2>
+    <p class="section-sub">使用中遇到问题？先看看这里。更多问题欢迎到 GitHub 提 Issue。</p>
+
+    <div class="faq">
+      <div class="faq-item open">
+        <div class="faq-q">手机版 Anki（AnkiMobile / AnkiDroid）能用吗？</div>
+        <div class="faq-a">不能。本插件基于 PyQt 开发，是桌面版 Anki 专用插件。AnkiMobile（iPhone/iPad）和 AnkiDroid（Android）不支持 Qt 插件系统，无法安装任何 Python 插件。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">插件安装后看不到左侧工具栏？</div>
+        <div class="faq-a">重启 Anki 后，左侧工具栏会在主窗口加载完成后自动出现（约 0.5 秒延迟）。如果仍看不到，检查 Anki 版本是否 ≥ 23.10。也可以通过菜单栏「AI Assistant → 📋 左侧工具栏」手动打开。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">如何获取 API Key？</div>
+        <div class="faq-a">前往对应平台的开发者页面注册并创建 API Key。大部分平台注册即送免费额度，足够日常使用。具体地址见上方安装配置板块。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">快捷键不生效怎么办？</div>
+        <div class="faq-a">Mac 用户请确认使用的是 Control (^) 键而非 Command (⌘)。Windows 用户需同时按 Ctrl+Shift。如果仍有问题，可通过菜单栏「AI Assistant」使用鼠标操作。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">可以用本地模型吗？</div>
+        <div class="faq-a">可以！选择 Ollama 提供商，在本地安装 Ollama 并拉取模型（如 qwen2.5:7b），填入本地地址即可完全离线使用。视觉功能也可配置本地多模态模型。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">支持哪些视觉模型？</div>
+        <div class="faq-a">支持所有主流视觉模型：DeepSeek-Vision（deepseek-v4-flash 自动支持图片）、通义千问 VL（qwen-vl-plus / qwen-vl-max）、智谱 GLM-4V、GPT-4V 等。视觉模型可在设置中独立配置。</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">生成的卡片格式是什么？</div>
+        <div class="faq-a">默认保留原始 Markdown 格式存储到 Anki 字段。如果在设置中开启"Markdown 转 HTML"，则转换为 HTML 存储。选择题（MCQ）使用专属"选择题"笔记类型，由模板内嵌 JS 渲染交互效果。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ═══════════════════════════════════════════ -->
+<section class="section">
+  <div class="section-inner">
+    <div class="cta-banner">
+      <h2>准备好提升你的 Anki 学习效率了吗？</h2>
+      <p>免费安装，国内 AI 直连，开箱即用。</p>
+      <a href="https://ankiweb.net/shared/info/1778462484" target="_blank" class="btn">从 AnkiWeb 下载</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Footer ════════════════════════════════════════ -->
+<footer class="footer">
+  <div class="links">
+    <a href="https://github.com/lu17631199052-ctrl/anki-ai-assistant" target="_blank">GitHub</a>
+    <a href="https://ankiweb.net/shared/info/1778462484" target="_blank">AnkiWeb</a>
+  </div>
+  <p>AI助手 v1.11.0 · Made with ❤️ for Anki learners</p>
+</footer>
+
+<script src="js/main.js"></script>
+</body>
+</html>
