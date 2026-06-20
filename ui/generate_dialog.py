@@ -652,6 +652,8 @@ class GenerateDialog(QDialog):
                 self.text_edit.setPlainText(text)
                 tooltip(f"已识别：{len(text)} 字符")
                 self._populate_decks()
+        except Exception as e:
+            showWarning(f"图片识别失败：{e}", parent=self)
         finally:
             os.unlink(tmp_path)
         return True
