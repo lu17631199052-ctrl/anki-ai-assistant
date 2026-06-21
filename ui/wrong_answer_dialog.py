@@ -43,12 +43,24 @@ class AnalyzeWorker(QThread):
     error_occurred = pyqtSignal(str)
     progress = pyqtSignal(int, int)  # current, total
 
-    def __init__(self, image_paths: list[str], user_instruction: str = ""):
+    def __init__(self, image_paths: list[str], user_instruction: str = "", text_content: str = ""):
         super().__init__()
         self.image_paths = image_paths
         self.user_instruction = user_instruction
+        self.text_content = text_content
 
     def run(self) -> None:
+        # Text mode: analyze text directly (text-based PDF)
+        if self.text_content:
+            from ..features.wrong_answer import analyze_wrong_answer_from_text
+            try:
+                cards = analyze_wrong_answer_from_text(self.text_content, user_instruction=self.user_instruction)
+                self.finished.emit(cards)
+            except Exception as e:
+                self.error_occurred.emit(str(e))
+            return
+
+        # Image mode: OCR + analyze each image (scanned PDF / screenshots)
         from ..features.wrong_answer import analyze_wrong_answer
 
         all_cards: list[dict[str, str]] = []
@@ -79,6 +91,7 @@ class WrongAnswerDialog(QDialog):
         self._cards: list[dict[str, str]] = []
         self._image_path: Optional[str] = None
         self._cleanup_paths: list[str] = []  # Multiple temp files to clean up
+        self._pdf_text: str = ""  # Extracted text for text-based PDFs
         self._worker: Optional[AnalyzeWorker] = None
         self._selected_deck_id = None
         self._edit_row: int = -1
@@ -168,7 +181,7 @@ class WrongAnswerDialog(QDialog):
             "QLabel { border: 1px solid #E0E4E8; border-radius: 6px; "
             "background: #FAFBFC; color: #AAA; font-size: 13px; }"
         )
-        self.img_label.setText("将错题截图拖拽到上方按钮\n或点击选择 / Ctrl+V 粘贴\n\n支持单张图片或 PDF 文件")
+        self.img_label.setText("将错题截图拖拽到上方按钮\n或点击选择 / Ctrl+V 粘贴\n\n支持单张图片 / 扫描版 PDF / 文字版 PDF")
         img_layout.addWidget(self.img_label)
 
         img_group.setLayout(img_layout)
@@ -518,8 +531,8 @@ class WrongAnswerDialog(QDialog):
             self._set_image(path)
 
     def _load_pdf(self, path: str) -> None:
-        """Extract images from a scanned PDF and prepare for batch analysis."""
-        from ..utils.file_parser import _extract_pdf_images
+        """Load PDF: try text extraction first, fall back to image extraction."""
+        from ..utils.file_parser import _extract_pdf_text_pure, _extract_pdf_images
 
         self._clear_results()
 
@@ -530,7 +543,33 @@ class WrongAnswerDialog(QDialog):
             except OSError:
                 pass
         self._cleanup_paths = []
+        self._pdf_text = ""
 
+        # Try text extraction first (text-based PDF)
+        try:
+            text = _extract_pdf_text_pure(path)
+            if text and len(text.strip()) > 50:
+                self._image_path = path
+                self._pdf_text = text.strip()
+                preview = text[:800] + ("..." if len(text) > 800 else "")
+                self.img_label.setText(f"📄 文字版 PDF\n{os.path.basename(path)}\n\n{preview}")
+                self.img_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                self.img_label.setWordWrap(True)
+                self.img_label.setStyleSheet(
+                    "QLabel { border: 2px solid #27AE60; border-radius: 6px; "
+                    "background: #F0FAF4; color: #333; font-size: 12px; padding: 10px; }"
+                )
+                self.analyze_btn.setEnabled(True)
+                self.clear_btn.setEnabled(True)
+                self.status_label.setText(
+                    f"已加载文字版 PDF：{os.path.basename(path)}，"
+                    f"共 {len(text)} 字符（将直接用主模型分析）"
+                )
+                return
+        except Exception:
+            pass
+
+        # Fall back to image extraction (scanned PDF)
         try:
             images = _extract_pdf_images(path)
         except Exception as e:
@@ -539,9 +578,8 @@ class WrongAnswerDialog(QDialog):
 
         if not images:
             showWarning(
-                "PDF 中未找到嵌入图片。\n\n"
-                "此功能适用于扫描版 PDF（每页为截图）。\n"
-                "如果是文字版 PDF，请使用「AI 生成卡片」功能。",
+                "PDF 中未找到嵌入图片，文字提取也为空。\n\n"
+                "请确认 PDF 是否为扫描版或文字版。",
                 parent=self,
             )
             return
@@ -549,14 +587,16 @@ class WrongAnswerDialog(QDialog):
         # Show PDF info in preview area
         self._image_path = path
         self._cleanup_paths = images  # Track temp files for cleanup
-        self.img_label.setText(f"📄 PDF 文件\n{os.path.basename(path)}\n\n共提取 {len(images)} 页图片")
+        self.img_label.setText(f"📄 扫描版 PDF\n{os.path.basename(path)}\n\n共提取 {len(images)} 页图片")
+        self.img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.img_label.setWordWrap(True)
         self.img_label.setStyleSheet(
             "QLabel { border: 2px solid #4A90D9; border-radius: 6px; "
             "background: #F0F4FF; color: #333; font-size: 14px; }"
         )
         self.analyze_btn.setEnabled(True)
         self.clear_btn.setEnabled(True)
-        self.status_label.setText(f"已加载 PDF：{os.path.basename(path)}，共 {len(images)} 页")
+        self.status_label.setText(f"已加载扫描版 PDF：{os.path.basename(path)}，共 {len(images)} 页")
         self._cards = []
         self._edit_row = -1
         self._populate_table()
@@ -598,6 +638,7 @@ class WrongAnswerDialog(QDialog):
                     pass
             self._cleanup_paths = []
 
+        self._pdf_text = ""
         self._image_path = path
         if cleanup:
             self._cleanup_paths = cleanup
@@ -644,10 +685,11 @@ class WrongAnswerDialog(QDialog):
                 pass
         self._cleanup_paths = []
         self._image_path = None
+        self._pdf_text = ""
         self._selected_deck_id = None
         self.deck_btn.setText("选择牌组...")
         self.img_label.clear()
-        self.img_label.setText("将错题截图拖拽到上方按钮\n或点击选择 / Ctrl+V 粘贴\n\n支持单张图片或 PDF 文件")
+        self.img_label.setText("将错题截图拖拽到上方按钮\n或点击选择 / Ctrl+V 粘贴\n\n支持单张图片 / 扫描版 PDF / 文字版 PDF")
         self.img_label.setStyleSheet(
             "QLabel { border: 1px solid #E0E4E8; border-radius: 6px; "
             "background: #FAFBFC; color: #AAA; font-size: 13px; }"
@@ -666,12 +708,30 @@ class WrongAnswerDialog(QDialog):
     # ═══════════════════════════════════════════════════════════════
 
     def _analyze(self) -> None:
-        # Determine image paths to analyze
+        user_instruction = self.instruction_edit.toPlainText().strip()
+
+        # Text mode: text-based PDF
+        if self._pdf_text:
+            self.analyze_btn.setEnabled(False)
+            self.upload_btn.setEnabled(False)
+            self.paste_btn.setEnabled(False)
+            self.add_btn.setEnabled(False)
+            self.status_label.setText("⏳ AI 正在分析错题资料，请稍候...")
+            tooltip("AI 正在分析错题，请稍候...")
+
+            self._worker = AnalyzeWorker(
+                [], user_instruction=user_instruction, text_content=self._pdf_text
+            )
+            self._worker.finished.connect(self._on_analysis_done)
+            self._worker.error_occurred.connect(self._on_analysis_error)
+            self._worker.progress.connect(self._on_analysis_progress)
+            self._worker.start()
+            return
+
+        # Image mode: scanned PDF or screenshots
         if self._cleanup_paths:
-            # PDF mode: analyze all extracted images
             image_paths = list(self._cleanup_paths)
         elif self._image_path:
-            # Single image mode
             image_paths = [self._image_path]
         else:
             return
@@ -688,7 +748,7 @@ class WrongAnswerDialog(QDialog):
             self.status_label.setText("⏳ AI 正在分析错题，请稍候...")
         tooltip("AI 正在分析错题，请稍候...")
 
-        self._worker = AnalyzeWorker(image_paths, user_instruction=self.instruction_edit.toPlainText().strip())
+        self._worker = AnalyzeWorker(image_paths, user_instruction=user_instruction)
         self._worker.finished.connect(self._on_analysis_done)
         self._worker.error_occurred.connect(self._on_analysis_error)
         self._worker.progress.connect(self._on_analysis_progress)

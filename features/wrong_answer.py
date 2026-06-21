@@ -117,9 +117,43 @@ def analyze_wrong_answer(image_path: str, user_instruction: str = "") -> list[di
         max_tokens=cfg.get("max_tokens", 8192),
     )
 
-    cards = _parse_cards_json(response.content)
+    return _cards_from_response(response.content)
+
+
+def analyze_wrong_answer_from_text(text: str, user_instruction: str = "") -> list[dict[str, str]]:
+    """Analyze text content directly — for text-based PDFs or pasted text.
+
+    Skips the vision OCR step and sends the text directly to the main chat model.
+    """
+    cfg = get_config()
+    main_api_key = cfg.get("api_key", "")
+    if not main_api_key:
+        raise RuntimeError("请在设置中配置 API Key")
+
+    main_client = OpenAICompatProvider(base_url=get_active_base_url(), api_key=main_api_key)
+
+    user_content = f"请分析以下错题资料，生成 Anki 卡片。\n\n资料文字内容：\n\n{text}"
+    if user_instruction.strip():
+        user_content += f"\n\n【用户特别要求】{user_instruction.strip()}"
+
+    response = main_client.chat(
+        [
+            LLMMessage(role="system", content=WRONG_ANSWER_SYSTEM_PROMPT),
+            LLMMessage(role="user", content=user_content),
+        ],
+        model=get_active_model(),
+        temperature=0.3,
+        max_tokens=cfg.get("max_tokens", 8192),
+    )
+
+    return _cards_from_response(response.content)
+
+
+def _cards_from_response(content: str) -> list[dict[str, str]]:
+    """Parse AI response content into card dicts."""
+    cards = _parse_cards_json(content)
     if not cards:
-        raw = response.content.strip()
+        raw = content.strip()
         if raw:
             cards = [{"front": "错题分析（请编辑题目）", "back": raw}]
         else:
