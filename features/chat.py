@@ -160,7 +160,7 @@ class ChatSession:
                     self.messages,
                     model=model,
                     temperature=cfg.get("temperature", 0.7),
-                    max_tokens=max_tokens * 2,
+                    max_tokens=min(max_tokens * 2, 8192),
                 ):
                     if chunk.startswith("__FINISH_REASON__:"):
                         continue

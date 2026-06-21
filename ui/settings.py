@@ -199,7 +199,7 @@ class SettingsDialog(QDialog):
         param_layout.addRow("Temperature:", self.temp_spin)
 
         self.max_tokens_spin = QSpinBox()
-        self.max_tokens_spin.setRange(256, 65536)
+        self.max_tokens_spin.setRange(256, 8192)
         self.max_tokens_spin.setSingleStep(256)
         param_layout.addRow("Max Tokens:", self.max_tokens_spin)
         param_group.setLayout(param_layout)
@@ -273,6 +273,12 @@ class SettingsDialog(QDialog):
             )
             prompt_layout.addRow(f"提示词 {i+1}:", edit)
             self.prompt_edits.append(edit)
+
+        self.prompt_fill_only_check = QCheckBox(
+            "点击 1-4 按钮时仅填入输入框（不自动发送），方便先修改再发出"
+        )
+        prompt_layout.addRow(self.prompt_fill_only_check)
+
         prompt_group.setLayout(prompt_layout)
         tab_prompt_layout.addWidget(prompt_group)
         tab_prompt_layout.addStretch()
@@ -379,6 +385,8 @@ class SettingsDialog(QDialog):
             else:
                 edit.clear()
 
+        self.prompt_fill_only_check.setChecked(self.cfg.get("prompt_fill_only", False))
+
     def _on_provider_changed(self) -> None:
         provider = self.provider_combo.currentData()
         preset = get_provider_preset(provider)
@@ -414,6 +422,7 @@ class SettingsDialog(QDialog):
         self.cfg["default_note_type"] = self.default_note_type_combo.currentData()
         self.cfg["md_to_html"] = self.md_to_html_check.isChecked()
         self.cfg["chat_prompts"] = [e.toPlainText().strip() for e in self.prompt_edits]
+        self.cfg["prompt_fill_only"] = self.prompt_fill_only_check.isChecked()
         self.cfg["default_search_engine"] = self.search_engine_combo.currentText()
         self.cfg["vision_provider"] = self.vision_provider_combo.currentData()
         self.cfg["vision_api_key"] = self.vision_api_key_edit.text().strip()
