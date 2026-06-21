@@ -560,6 +560,7 @@ class WrongAnswerDialog(QDialog):
 
     def _load_pdf(self, path: str) -> None:
         """Load PDF: try text extraction first, fall back to image extraction."""
+        import subprocess, shutil, platform
         from ..utils.file_parser import _extract_pdf_text_pure, _extract_pdf_images
 
         self._clear_results()
@@ -573,29 +574,64 @@ class WrongAnswerDialog(QDialog):
         self._cleanup_paths = []
         self._pdf_text = ""
 
-        # Try text extraction first (text-based PDF)
-        try:
-            text = _extract_pdf_text_pure(path)
-            if text and len(text.strip()) > 50 and not _is_likely_garbled(text):
-                self._image_path = path
-                self._pdf_text = text.strip()
-                preview = text[:800] + ("..." if len(text) > 800 else "")
-                self.img_label.setText(f"📄 文字版 PDF\n{os.path.basename(path)}\n\n{preview}")
-                self.img_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-                self.img_label.setWordWrap(True)
-                self.img_label.setStyleSheet(
-                    "QLabel { border: 2px solid #27AE60; border-radius: 6px; "
-                    "background: #F0FAF4; color: #333; font-size: 12px; padding: 10px; }"
+        # === Step 1: try pdftotext (handles custom font encodings) ===
+        text = ""
+        pdftotext_bin = None
+        for candidate in ["/opt/homebrew/bin/pdftotext", "/usr/local/bin/pdftotext"]:
+            if os.path.isfile(candidate):
+                pdftotext_bin = candidate
+                break
+        if pdftotext_bin is None:
+            pdftotext_bin = shutil.which("pdftotext")
+        if pdftotext_bin is None and os.name == "nt":
+            for candidate in [
+                r"C:\Program Files\poppler\bin\pdftotext.exe",
+                r"C:\poppler\bin\pdftotext.exe",
+            ]:
+                if os.path.isfile(candidate):
+                    pdftotext_bin = candidate
+                    break
+
+        if pdftotext_bin is not None:
+            try:
+                kwargs = dict(capture_output=True, text=True, timeout=30)
+                if platform.system() == "Windows":
+                    kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                result = subprocess.run(
+                    [pdftotext_bin, "-layout", path, "-"],
+                    **kwargs,
                 )
-                self.analyze_btn.setEnabled(True)
-                self.clear_btn.setEnabled(True)
-                self.status_label.setText(
-                    f"已加载文字版 PDF：{os.path.basename(path)}，"
-                    f"共 {len(text)} 字符（将直接用主模型分析）"
-                )
-                return
-        except Exception:
-            pass
+                if result.returncode == 0 and result.stdout.strip():
+                    text = result.stdout.strip()
+            except Exception:
+                pass
+
+        # === Step 2: fall back to pure Python text extraction ===
+        if not text:
+            try:
+                text = _extract_pdf_text_pure(path)
+            except Exception:
+                pass
+
+        # === Step 3: if text looks valid, use text mode ===
+        if text and len(text.strip()) > 50 and not _is_likely_garbled(text):
+            self._image_path = path
+            self._pdf_text = text.strip()
+            preview = text[:800] + ("..." if len(text) > 800 else "")
+            self.img_label.setText(f"📄 文字版 PDF\n{os.path.basename(path)}\n\n{preview}")
+            self.img_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            self.img_label.setWordWrap(True)
+            self.img_label.setStyleSheet(
+                "QLabel { border: 2px solid #27AE60; border-radius: 6px; "
+                "background: #F0FAF4; color: #333; font-size: 12px; padding: 10px; }"
+            )
+            self.analyze_btn.setEnabled(True)
+            self.clear_btn.setEnabled(True)
+            self.status_label.setText(
+                f"已加载文字版 PDF：{os.path.basename(path)}，"
+                f"共 {len(text)} 字符（将直接用主模型分析）"
+            )
+            return
 
         # Fall back to image extraction (scanned PDF)
         try:
