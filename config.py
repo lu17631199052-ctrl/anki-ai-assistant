@@ -85,6 +85,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     ],
     # Default search engine for browser panel (Enter key)
     "default_search_engine": "Google",
+    # If True, quick prompt buttons (1-4) only fill the input box instead of auto-sending
+    "prompt_fill_only": False,
 }
 
 
@@ -134,6 +136,10 @@ def get_config() -> dict[str, Any]:
     if cfg.get("model") == "deepseek-reasoner":
         cfg["model"] = "deepseek-v4-pro"
         changed = True
+    # Clamp max_tokens to supported range [1, 8192]
+    if cfg.get("max_tokens", 8192) > 8192:
+        cfg["max_tokens"] = 8192
+        changed = True
     if changed:
         mw.addonManager.writeConfig(ADDON_NAME, cfg)
     # Always save to the safe local backup so it survives future upgrades
@@ -153,6 +159,12 @@ def _load_local_config() -> Optional[dict[str, Any]]:
             if key not in cfg:
                 cfg[key] = val
                 changed = True
+        if changed:
+            _save_local_config(cfg)
+        # Clamp max_tokens to supported range [1, 8192]
+        if cfg.get("max_tokens", 8192) > 8192:
+            cfg["max_tokens"] = 8192
+            changed = True
         if changed:
             _save_local_config(cfg)
         return cfg

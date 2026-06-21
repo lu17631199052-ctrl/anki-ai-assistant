@@ -398,11 +398,13 @@ class OpenAICompatProvider(BaseLLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 8192,
     ) -> LLMResponse:
+        # Clamp max_tokens to API-safe range [1, 8192]
+        safe_max_tokens = max(1, min(max_tokens, 8192))
         payload: dict[str, Any] = {
             "model": model,
             "messages": [self._build_message(m) for m in messages],
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_tokens": safe_max_tokens,
         }
 
         url = self._build_url("/chat/completions")
@@ -435,11 +437,13 @@ class OpenAICompatProvider(BaseLLMProvider):
         caller has not received any content, falls back to non-streaming.
         Raises RuntimeError if all attempts fail.
         """
+        # Clamp max_tokens to API-safe range [1, 8192]
+        safe_max_tokens = max(1, min(max_tokens, 8192))
         payload: dict[str, Any] = {
             "model": model,
             "messages": [self._build_message(m) for m in messages],
             "temperature": temperature,
-            "max_tokens": max_tokens,
+            "max_tokens": safe_max_tokens,
             "stream": True,
         }
 
