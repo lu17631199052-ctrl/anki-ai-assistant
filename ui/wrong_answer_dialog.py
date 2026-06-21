@@ -37,6 +37,34 @@ from ..features.generate import add_cards_to_deck
 from ..features.wrong_answer import ensure_mcq_note_type, add_mcq_cards_to_deck, MCQ_NOTE_TYPE_NAME
 
 
+def _is_likely_garbled(text: str) -> bool:
+    """Heuristic: check if extracted text is likely binary garbage.
+
+    Scanned PDFs often produce garbage when text extraction is attempted
+    (decoded Latin-1 binary that looks like random symbols). Real documents
+    should have mostly printable ASCII / CJK / whitespace characters.
+    Returns True if the text is probably garbage.
+    """
+    if len(text) < 50:
+        return False  # Too short to judge — let caller decide
+    good = 0
+    for ch in text:
+        if ch in ("\n", "\r", "\t", " "):
+            good += 1
+        elif "一" <= ch <= "鿿":   # CJK Unified
+            good += 1
+        elif "㐀" <= ch <= "䶿":   # CJK Extension A
+            good += 1
+        elif "　" <= ch <= "〿":   # CJK punctuation
+            good += 1
+        elif "＀" <= ch <= "￯":   # Fullwidth forms
+            good += 1
+        elif ch.isascii() and ch.isprintable():
+            good += 1
+    ratio = good / len(text)
+    return ratio < 0.4  # < 40% normal chars = likely garbage
+
+
 class AnalyzeWorker(QThread):
     """Background thread for AI analysis of wrong-answer screenshots (single or batch)."""
     finished = pyqtSignal(list)
@@ -548,7 +576,7 @@ class WrongAnswerDialog(QDialog):
         # Try text extraction first (text-based PDF)
         try:
             text = _extract_pdf_text_pure(path)
-            if text and len(text.strip()) > 50:
+            if text and len(text.strip()) > 50 and not _is_likely_garbled(text):
                 self._image_path = path
                 self._pdf_text = text.strip()
                 preview = text[:800] + ("..." if len(text) > 800 else "")
