@@ -60,6 +60,8 @@ class GenerateDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # macOS: allow dragging to other desktops
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
         self.setWindowTitle("AI 生成卡片")
         self.setMinimumSize(1000, 700)
         self.resize(1200, 800)
