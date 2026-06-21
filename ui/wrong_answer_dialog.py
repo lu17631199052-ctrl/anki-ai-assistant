@@ -43,9 +43,10 @@ class AnalyzeWorker(QThread):
     error_occurred = pyqtSignal(str)
     progress = pyqtSignal(int, int)  # current, total
 
-    def __init__(self, image_paths: list[str]):
+    def __init__(self, image_paths: list[str], user_instruction: str = ""):
         super().__init__()
         self.image_paths = image_paths
+        self.user_instruction = user_instruction
 
     def run(self) -> None:
         from ..features.wrong_answer import analyze_wrong_answer
@@ -54,7 +55,7 @@ class AnalyzeWorker(QThread):
         total = len(self.image_paths)
         for i, path in enumerate(self.image_paths):
             try:
-                cards = analyze_wrong_answer(path)
+                cards = analyze_wrong_answer(path, user_instruction=self.user_instruction)
                 all_cards.extend(cards)
             except Exception as e:
                 # Continue with remaining pages on per-page error
@@ -170,6 +171,27 @@ class WrongAnswerDialog(QDialog):
 
         img_group.setLayout(img_layout)
         left_layout.addWidget(img_group)
+
+        # User instruction
+        instr_group = QGroupBox("💡 分析指令（可选）")
+        instr_layout = QVBoxLayout()
+        self.instruction_edit = QTextEdit()
+        self.instruction_edit.setPlaceholderText(
+            "在此输入对 AI 的额外要求，例如：\n"
+            "• \"请重点分析辨证论治的思路\"\n"
+            "• \"答案请用表格形式对比各选项\"\n"
+            "• \"请补充相关的方剂出处和组成\"\n"
+            "• \"这是一道X科目的题，请针对该科目特点分析\""
+        )
+        self.instruction_edit.setMinimumHeight(80)
+        self.instruction_edit.setMaximumHeight(140)
+        self.instruction_edit.setStyleSheet(
+            "QTextEdit { border: 1px solid #E0E4E8; border-radius: 6px; "
+            "padding: 8px; font-size: 12px; background: #FFF; color: #555; }"
+        )
+        instr_layout.addWidget(self.instruction_edit)
+        instr_group.setLayout(instr_layout)
+        left_layout.addWidget(instr_group)
 
         # Status
         self.status_label = QLabel("")
@@ -664,7 +686,7 @@ class WrongAnswerDialog(QDialog):
             self.status_label.setText("⏳ AI 正在分析错题，请稍候...")
         tooltip("AI 正在分析错题，请稍候...")
 
-        self._worker = AnalyzeWorker(image_paths)
+        self._worker = AnalyzeWorker(image_paths, user_instruction=self.instruction_edit.toPlainText().strip())
         self._worker.finished.connect(self._on_analysis_done)
         self._worker.error_occurred.connect(self._on_analysis_error)
         self._worker.progress.connect(self._on_analysis_progress)

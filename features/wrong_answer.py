@@ -59,7 +59,7 @@ WRONG_ANSWER_SYSTEM_PROMPT = """你是一个专业的中医综合（中综）考
 # Image analysis
 # ═══════════════════════════════════════════════════════════════════
 
-def analyze_wrong_answer(image_path: str) -> list[dict[str, str]]:
+def analyze_wrong_answer(image_path: str, user_instruction: str = "") -> list[dict[str, str]]:
     import base64
 
     ext = os.path.splitext(image_path)[1].lower()
@@ -75,9 +75,14 @@ def analyze_wrong_answer(image_path: str) -> list[dict[str, str]]:
         raise RuntimeError("请在设置中配置视觉模型 API Key")
 
     client = OpenAICompatProvider(base_url=vc["base_url"], api_key=vc["api_key"])
+
+    user_content = "请分析这道错题截图，生成 Anki 卡片。"
+    if user_instruction.strip():
+        user_content += f"\n\n【用户特别要求】{user_instruction.strip()}"
+
     messages = [
         LLMMessage(role="system", content=WRONG_ANSWER_SYSTEM_PROMPT),
-        LLMMessage(role="user", content="请分析这道错题截图，生成 Anki 卡片。", images=[data_url]),
+        LLMMessage(role="user", content=user_content, images=[data_url]),
     ]
 
     response = client.chat(
