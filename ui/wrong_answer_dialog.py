@@ -110,9 +110,7 @@ class AnalyzeWorker(QThread):
 class WrongAnswerDialog(QDialog):
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        # macOS: allow dragging to other desktops
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.Window)
+        super().__init__(None)  # No parent — independent window, can go behind Anki
         self.setWindowTitle("AI 错题整理")
         self.setMinimumSize(1000, 700)
         self.resize(1200, 800)
