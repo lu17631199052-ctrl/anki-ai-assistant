@@ -6,18 +6,17 @@ import os
 
 from aqt import mw
 
-from ..config import get_config, get_vision_config
+from ..config import get_config, get_vision_config, get_active_base_url, get_active_model
 from ..llm.base import LLMMessage
 from ..llm.openai_compat import OpenAICompatProvider
 
 MCQ_NOTE_TYPE_NAME = "选择题"
 
-WRONG_ANSWER_SYSTEM_PROMPT = """你是一个专业的中医综合（中综）考试辅导助手。用户会提供一道选择题的截图，请仔细分析图片内容后，按以下要求输出：
+WRONG_ANSWER_SYSTEM_PROMPT = """你是一个专业的中医综合（中综）考试辅导助手。用户会提供一道从错题截图识别出的选择题文字，请按以下要求输出：
 
-1. 识别题目文字和所有选项（A/B/C/D 等）
-2. 根据题目内容判断正确答案
-3. 对每个选项进行分析，解释为什么对/错
-4. 提供相关知识点总结和记忆技巧
+1. 根据题目内容判断正确答案
+2. 对每个选项进行分析，解释为什么对/错
+3. 提供相关知识点总结和记忆技巧
 
 **卡片正面格式（必须严格遵守，用于生成可点击的选项框）**：
 ```
@@ -50,8 +49,8 @@ WRONG_ANSWER_SYSTEM_PROMPT = """你是一个专业的中医综合（中综）考
 ```
 
 注意：
-- 如果截图中包含多道题，请为每道题生成一张卡片
-- 如果截图中明确标出了正确答案（如红笔圈出、打勾等），以标注为准
+- 如果文字中包含多道题，请为每道题生成一张卡片
+- 如果文字中明确标出了正确答案（如红笔圈出、打勾等标注），以标注为准
 - 如果无法确定正确答案，请根据你的知识判断最可能的答案，并在解析中说明"""  # noqa: E501
 
 
@@ -70,26 +69,52 @@ def analyze_wrong_answer(image_path: str, user_instruction: str = "") -> list[di
         img_b64 = base64.b64encode(f.read()).decode("ascii")
     data_url = f"data:image/{mime};base64,{img_b64}"
 
+    # ═══════════════════════════════════════════════════════════════
+    # Step 1: OCR — vision model extracts text from image
+    # ═══════════════════════════════════════════════════════════════
     vc = get_vision_config()
     if not vc["api_key"]:
         raise RuntimeError("请在设置中配置视觉模型 API Key")
 
-    client = OpenAICompatProvider(base_url=vc["base_url"], api_key=vc["api_key"])
+    vision_client = OpenAICompatProvider(base_url=vc["base_url"], api_key=vc["api_key"])
+    ocr_response = vision_client.chat(
+        [
+            LLMMessage(
+                role="user",
+                content="请识别这张图片中的所有文字，原样输出，不要遗漏任何内容，不要添加任何解释。",
+                images=[data_url],
+            )
+        ],
+        model=vc["model"],
+        temperature=0.1,
+        max_tokens=get_config().get("max_tokens", 8192),
+    )
+    extracted_text = ocr_response.content.strip()
+    if not extracted_text:
+        raise RuntimeError("图片文字识别失败，请确认图片中包含清晰文字")
 
-    user_content = "请分析这道错题截图，生成 Anki 卡片。"
+    # ═══════════════════════════════════════════════════════════════
+    # Step 2: Analysis — main chat model generates cards from text
+    # ═══════════════════════════════════════════════════════════════
+    cfg = get_config()
+    main_api_key = cfg.get("api_key", "")
+    if not main_api_key:
+        raise RuntimeError("请在设置中配置 API Key")
+
+    main_client = OpenAICompatProvider(base_url=get_active_base_url(), api_key=main_api_key)
+
+    user_content = f"请分析以下从错题截图识别出的题目，生成 Anki 卡片。\n\n识别出的文字内容：\n\n{extracted_text}"
     if user_instruction.strip():
         user_content += f"\n\n【用户特别要求】{user_instruction.strip()}"
 
-    messages = [
-        LLMMessage(role="system", content=WRONG_ANSWER_SYSTEM_PROMPT),
-        LLMMessage(role="user", content=user_content, images=[data_url]),
-    ]
-
-    response = client.chat(
-        messages,
-        model=vc["model"],
+    response = main_client.chat(
+        [
+            LLMMessage(role="system", content=WRONG_ANSWER_SYSTEM_PROMPT),
+            LLMMessage(role="user", content=user_content),
+        ],
+        model=get_active_model(),
         temperature=0.3,
-        max_tokens=get_config().get("max_tokens", 8192),
+        max_tokens=cfg.get("max_tokens", 8192),
     )
 
     cards = _parse_cards_json(response.content)
