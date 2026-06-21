@@ -693,17 +693,12 @@ class WrongAnswerDialog(QDialog):
         self._worker.error_occurred.connect(self._on_analysis_error)
         self._worker.progress.connect(self._on_analysis_progress)
         self._worker.start()
-        # Minimize so user can use Anki main window while AI works
-        self.showMinimized()
 
     def _on_analysis_progress(self, current: int, total: int) -> None:
         if total > 1:
             self.status_label.setText(f"⏳ AI 正在分析第 {current}/{total} 页...")
 
     def _on_analysis_done(self, cards: list[dict[str, str]]) -> None:
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
         self._cards = cards
         self._edit_row = -1
         self.analyze_btn.setEnabled(True)
@@ -725,9 +720,6 @@ class WrongAnswerDialog(QDialog):
             self.status_label.setText("⚠️ 未生成卡片，请重试")
 
     def _on_analysis_error(self, error: str) -> None:
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
         self.analyze_btn.setEnabled(True)
         self.upload_btn.setEnabled(True)
         self.paste_btn.setEnabled(True)

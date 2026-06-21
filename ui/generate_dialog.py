@@ -840,13 +840,8 @@ class GenerateDialog(QDialog):
         self._worker.finished.connect(self._on_cards_generated)
         self._worker.error_occurred.connect(self._on_error)
         self._worker.start()
-        # Minimize so user can use Anki main window while AI works
-        self.showMinimized()
 
     def _on_cards_generated(self, cards: list[dict[str, str]]) -> None:
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
         self._cards = cards
         self._edit_row = -1
         self._populate_table()
@@ -857,9 +852,6 @@ class GenerateDialog(QDialog):
         self._worker = None
 
     def _on_error(self, error: str) -> None:
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
         showWarning(f"生成失败：{error}", parent=self)
         self.generate_btn.setEnabled(True)
         self.generate_btn.setText("生成卡片")
