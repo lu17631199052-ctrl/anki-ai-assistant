@@ -58,7 +58,7 @@ anki-ai-assistant/
 - 源项目路径：`~/ClaudeStudy/anki-ai-assistant/`（git 仓库）
 - GitHub：`https://github.com/lu17631199052-ctrl/anki-ai-assistant`
 - 修改代码后需要同步到 addons21 目录，清除 `__pycache__`，重启 Anki 生效
-- 打包命令（自动排除 user_config.json 和 __pycache__）：
+- 打包命令（自动排除 user_config.json、meta.json 和 __pycache__）：
   ```
   python3 -c "
   import zipfile, os
@@ -68,7 +68,7 @@ anki-ai-assistant/
       for root, dirs, files in os.walk(src):
           dirs[:] = [d for d in dirs if d != '__pycache__']
           for f in files:
-              if f == 'user_config.json':
+              if f in ('user_config.json', 'meta.json'):
                   continue
               full = os.path.join(root, f)
               zf.write(full, os.path.relpath(full, src))
@@ -92,12 +92,13 @@ anki-ai-assistant/
 ### 每次修改代码后必须检查：
 1. **扫描硬编码密钥：** `grep` 搜索 `sk-`、`api_key`、`token`、`secret`、`password` 在源代码文件中（排除 `.gitignore` 等），确认没有真实的 key
 2. **检查 addons21 目录：** `ls -la` 确认 addons21 目录下没有 `user_config.json` 或其他运行时生成的敏感文件
-3. **审查打包命令排除列表：** 确认打包命令会排除所有敏感文件（目前排除：`user_config.json`、`__pycache__`）
+3. **审查打包命令排除列表：** 确认打包命令会排除所有敏感文件（目前排除：`user_config.json`、`meta.json`、`__pycache__`）
 4. **检查 .gitignore：** 确认敏感文件模式已列入 `.gitignore`
 5. **打包前最终确认：** 打包前执行 `ls addons21目录`，人工确认文件列表干净
 
 ### 不得打包/提交的文件：
 - `user_config.json`（运行时本地配置，含 API key）
+- `meta.json`（Anki 运行时配置备份，含 API key）
 - `__pycache__/`、`*.pyc`
 - `.env`、`credentials.*`、`*.pem`、`*.key`
 - 任何含 `sk-` 或类似密钥模式的非代码文件

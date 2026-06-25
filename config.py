@@ -87,6 +87,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "default_search_engine": "Google",
     # If True, quick prompt buttons (1-4) only fill the input box instead of auto-sending
     "prompt_fill_only": False,
+    # Quiz generator defaults
+    "last_quiz_deck": "",
+    "quiz_default_count": 10,
+    "quiz_question_type": "differentiating",
 }
 
 

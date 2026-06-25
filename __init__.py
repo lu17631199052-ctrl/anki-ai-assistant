@@ -19,6 +19,7 @@ setup_logging(ADDON_DIR)
 # Keep references to modeless dialogs so they aren't garbage-collected
 _generate_dialog = None
 _wrong_answer_dialog = None
+_quiz_generator_dialog = None
 
 
 def _open_chat() -> None:
@@ -38,6 +39,13 @@ def _open_wrong_answer() -> None:
     global _wrong_answer_dialog
     _wrong_answer_dialog = WrongAnswerDialog(mw)
     _wrong_answer_dialog.show()
+
+
+def _open_quiz_generator() -> None:
+    from .ui.quiz_generator_dialog import QuizGeneratorDialog
+    global _quiz_generator_dialog
+    _quiz_generator_dialog = QuizGeneratorDialog(mw)
+    _quiz_generator_dialog.show()
 
 
 def _open_browser_search() -> None:
@@ -92,6 +100,10 @@ def _setup_menu() -> None:
     qconnect(wrong_answer_action.triggered, _open_wrong_answer)
     menu.addAction(wrong_answer_action)
 
+    quiz_action: QAction = QAction("AI 出题", mw)
+    qconnect(quiz_action.triggered, _open_quiz_generator)
+    menu.addAction(quiz_action)
+
     browser_search_action: QAction = QAction("🌐 浏览器搜索", mw)
     qconnect(browser_search_action.triggered, _open_browser_search)
     menu.addAction(browser_search_action)
@@ -134,11 +146,13 @@ def _on_reviewer_did_show(card) -> None:
         _wrong_key = "Meta+R"
         _chat_key = "Meta+Q"
         _generate_key = "Meta+E"
+        _quiz_key = "Meta+T"
     else:
         _explain_key = "Ctrl+Shift+W"
         _wrong_key = "Ctrl+Shift+R"
         _chat_key = "Ctrl+Shift+Q"
         _generate_key = "Ctrl+Shift+E"
+        _quiz_key = "Ctrl+Shift+T"
 
     # AI 解释当前卡片
     shortcut_explain = QShortcut(QKeySequence(_explain_key), reviewer.web)
@@ -155,6 +169,10 @@ def _on_reviewer_did_show(card) -> None:
     # AI 生成卡片
     shortcut_generate = QShortcut(QKeySequence(_generate_key), reviewer.web)
     qconnect(shortcut_generate.activated, _open_generate)
+
+    # AI 出题
+    shortcut_quiz = QShortcut(QKeySequence(_quiz_key), reviewer.web)
+    qconnect(shortcut_quiz.activated, _open_quiz_generator)
 
     _shortcut_registered = True
 
