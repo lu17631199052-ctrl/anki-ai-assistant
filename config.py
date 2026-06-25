@@ -90,7 +90,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Quiz generator defaults
     "last_quiz_deck": "",
     "quiz_default_count": 10,
-    "quiz_question_type": "differentiating",
+    "quiz_question_type": "differentiating",  # "differentiating" | "single_item" | "mixed"
 }
 
 

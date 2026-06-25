@@ -207,7 +207,7 @@ class QuizGeneratorDialog(QDialog):
         settings_layout.addWidget(QLabel("题目类型："))
         self.type_combo = QComboBox()
         self.type_combo.addItem("对比型（重点区分相似概念）", "differentiating")
-        self.type_combo.addItem("单一知识点型（考察单个知识点）", "single_disease")
+        self.type_combo.addItem("单一知识点型（考察单个知识点）", "single_item")
         self.type_combo.addItem("混合型", "mixed")
         default_type = get_config().get("quiz_question_type", "differentiating")
         for i in range(self.type_combo.count()):
