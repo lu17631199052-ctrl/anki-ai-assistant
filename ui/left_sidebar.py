@@ -200,7 +200,9 @@ class LauncherWidget(QWidget):
         tool_icons = [
             ("notebook",       "notebook",       "记事本", "记事本 — 随时记录想法"),
             ("todo",           "todo",           "待办",   "待办清单"),
+            ("quiz",           "quiz",           "刷题",   "AI 出题 — 从牌组生成练习题目"),
             ("wrong_answer",   "wrong_answer",   "错题",   "AI 错题整理 — 截图识别"),
+            ("generate",       "generate",       "AI生成", "AI 生成卡片 — 从文本生成卡片"),
             ("chat",           "chat",           "AI对话", "AI 学习助手对话"),
             ("browser_search", "browser",        "搜索",   "浏览器搜索 — 百度/谷歌/Bing/B站/YouTube"),
         ]
@@ -211,8 +213,8 @@ class LauncherWidget(QWidget):
             if btn:
                 btn.clicked.connect(self._make_handler(key))
                 btn.installEventFilter(self)
-                # wrong_answer is a one-shot action, not a toggle
-                if key == "wrong_answer":
+                # wrong_answer, generate, and quiz are one-shot actions, not toggles
+                if key in ("wrong_answer", "generate", "quiz"):
                     btn.setCheckable(False)
                 self._buttons[key] = btn
             layout.addWidget(item_widget)
@@ -289,8 +291,12 @@ class LauncherWidget(QWidget):
                 toggle_notebook(tab="notepad")
             elif key == "todo":
                 toggle_notebook(tab="todo")
+            elif key == "quiz":
+                _open_quiz()
             elif key == "wrong_answer":
                 _toggle_wrong_answer()
+            elif key == "generate":
+                _open_generate()
             elif key == "chat":
                 _toggle_chat()
             elif key == "browser_search":
@@ -366,7 +372,7 @@ class LauncherWidget(QWidget):
         # Update label colors
         for container in self.findChildren(QWidget):
             lbl = container.findChild(QLabel)
-            if lbl and lbl.text() in ("记事本", "待办", "AI对话", "搜索", "设置"):
+            if lbl and lbl.text() in ("记事本", "待办", "刷题", "错题", "AI生成", "AI对话", "搜索", "设置"):
                 btn = container.findChild(QPushButton)
                 if btn and btn.isChecked():
                     lbl.setStyleSheet(
@@ -945,16 +951,12 @@ def _update_launcher_buttons() -> None:
 
 
 def _toggle_chat() -> None:
-    """Toggle the existing AI chat dock."""
+    """Toggle the AI chat dock (delegates to _open_chat which now handles toggle)."""
     try:
-        from .chat_dialog import _open_chat, _dock_widget as chat_dock
-        if chat_dock is not None and chat_dock.isVisible():
-            chat_dock.hide()
-        else:
-            _open_chat()
-    except Exception:
         from .chat_dialog import _open_chat
         _open_chat()
+    except Exception:
+        pass
     _update_launcher_buttons()
 
 
@@ -970,13 +972,31 @@ def _toggle_browser_search() -> None:
 
 
 _wrong_answer_dialog_ref = None
+_generate_dialog_ref = None
+_quiz_dialog_ref = None
 
-def _toggle_wrong_answer() -> None:
+def _toggle_wrong_answer():
     """Open the wrong answer dialog (screenshot → MCQ cards)."""
     global _wrong_answer_dialog_ref
     from .wrong_answer_dialog import WrongAnswerDialog
     _wrong_answer_dialog_ref = WrongAnswerDialog(mw)
     _wrong_answer_dialog_ref.show()
+
+
+def _open_generate():
+    """Open the AI generate cards dialog."""
+    global _generate_dialog_ref
+    from .generate_dialog import GenerateDialog
+    _generate_dialog_ref = GenerateDialog(mw)
+    _generate_dialog_ref.show()
+
+
+def _open_quiz():
+    """Open the AI quiz generator dialog."""
+    global _quiz_dialog_ref
+    from .quiz_generator_dialog import QuizGeneratorDialog
+    _quiz_dialog_ref = QuizGeneratorDialog(mw)
+    _quiz_dialog_ref.show()
 
 
 # ── Public API ───────────────────────────────────────────────────────
