@@ -40,44 +40,76 @@ QUIZ_SYSTEM_PROMPT = """你是出题专家。根据用户提供的知识点生�
 
 
 def read_deck_group_notes(deck_prefix: str) -> dict[str, dict[str, str]]:
-    """Read all notes under a deck group, grouped by disease name."""
+    """Read all notes under a deck group, grouped by sub-deck name.
+
+    Uses deck IDs for reliable matching (avoids escaping issues with deck names).
+    Works for any deck structure, not just 中内.
+    """
+    # Get all decks
     all_decks = mw.col.decks.all_names_and_ids()
-    matching_decks = [d for d in all_decks if d.name.startswith(deck_prefix)]
-    if not matching_decks:
+
+    # Match decks by name prefix, collect IDs
+    matching_ids: list[int] = []
+    for d in all_decks:
+        if d.name == deck_prefix or d.name.startswith(deck_prefix + "::"):
+            matching_ids.append(d.id)
+
+    if not matching_ids:
         return {}
 
+    # Find notes using did: (deck ID) — reliable, no name escaping issues
     all_nids: list[int] = []
-    for deck in matching_decks:
-        nids = mw.col.find_notes(f'"deck:{deck.name}"')
+    for did in matching_ids:
+        nids = mw.col.find_notes(f"did:{did}")
         all_nids.extend(nids)
     all_nids = list(set(all_nids))
     if not all_nids:
         return {}
 
-    did_to_name: dict[int, str] = {d.id: d.name for d in matching_decks}
-    result: dict[str, dict[str, str]] = {}
+    # Build did → name map for ALL decks (cards may reference any deck)
+    did_to_name: dict[int, str] = {d.id: d.name for d in all_decks}
 
+    # Find the base deck name for stripping prefix
+    # e.g. if prefix is "English", sub-deck "English::Unit1" → "Unit1"
+    prefix_parts = deck_prefix.split("::")
+
+    result: dict[str, dict[str, str]] = {}
     for nid in all_nids:
         try:
             note = mw.col.get_note(nid)
         except Exception:
             continue
 
+        # Find which deck this note belongs to (from its cards)
         cids = mw.col.db.list("SELECT id FROM cards WHERE nid = ? LIMIT 1", nid)
         if not cids:
             continue
         card = mw.col.get_card(cids[0])
         deck_name = did_to_name.get(card.did, "")
 
-        parts = deck_name.split("::")
-        disease_raw = parts[-1] if parts else deck_name
-        disease = re.sub(r'^\d+\s*', '', disease_raw).strip()
-        if not disease:
-            disease = disease_raw
+        # Group name: strip the prefix, use the immediate sub-deck name
+        # Or if it's the prefix deck itself, use the last segment
+        if deck_name.startswith(deck_prefix + "::"):
+            group = deck_name[len(deck_prefix) + 2:]  # strip "Prefix::"
+            # Take only the first sub-level for grouping
+            group = group.split("::")[0]
+        elif deck_name == deck_prefix:
+            parts = deck_name.split("::")
+            group = parts[-1] if parts else deck_name
+        else:
+            # Card is in a deck outside the selection — use its last segment
+            parts = deck_name.split("::")
+            group = parts[-1] if parts else deck_name
 
-        if disease not in result:
-            result[disease] = {}
+        # Clean up leading number prefix like "01 "
+        group = re.sub(r'^\d+\s*', '', group).strip()
+        if not group:
+            group = deck_name
 
+        if group not in result:
+            result[group] = {}
+
+        # Read note fields
         model = note.note_type()
         if model is None:
             continue
@@ -89,9 +121,9 @@ def read_deck_group_notes(deck_prefix: str) -> dict[str, dict[str, str]]:
             cleaned = _strip_html(val)
             if cleaned.strip():
                 field_name = field_names[i]
-                existing = result[disease].get(field_name, "")
+                existing = result[group].get(field_name, "")
                 if cleaned not in existing:
-                    result[disease][field_name] = (
+                    result[group][field_name] = (
                         existing + ("\n" if existing else "") + cleaned
                     )
 
