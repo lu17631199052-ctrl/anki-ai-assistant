@@ -219,10 +219,13 @@ class WrongAnswerDialog(QDialog):
         self.instruction_edit = QTextEdit()
         self.instruction_edit.setPlaceholderText(
             "在此输入对 AI 的额外要求，例如：\n"
-            "• \"请重点分析辨证论治的思路\"\n"
+            "• \"请重点分析辨证论治的思路\"（中内/中诊类）\n"
             "• \"答案请用表格形式对比各选项\"\n"
-            "• \"请补充相关的方剂出处和组成\"\n"
-            "• \"这是一道X科目的题，请针对该科目特点分析\""
+            "• \"请补充相关的方剂出处和组成\"（方剂类）\n"
+            "• \"请列出同类药物的功效差异\"（中药类）\n"
+            "• \"请引用原文并结合经典阐释\"（中基类）\n"
+            "• \"请分析配穴思路和操作要点\"（针灸类）\n"
+            "• AI 会自动判断科目，无需手动指定"
         )
         self.instruction_edit.setMinimumHeight(80)
         self.instruction_edit.setMaximumHeight(140)
